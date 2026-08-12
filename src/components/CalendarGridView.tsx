@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { BarChart3, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import Avatar from './Avatar';
-import { capitalize, isToday } from '../utils';
+import { capitalize, isToday, toDateInput } from '../utils';
 import { newId } from '../lib/db';
 import type { FamilyEvent, Notify, User } from '../types';
 
@@ -24,8 +24,9 @@ const CalendarGridView = ({
 }: CalendarGridViewProps) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [newEventDate, setNewEventDate] = useState('');
+  const [editingEvent, setEditingEvent] = useState<FamilyEvent | null>(null);
 
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -94,10 +95,16 @@ const CalendarGridView = ({
       .split('T')[0];
     setNewEventDate(localDate);
     setSelectedDate(null);
-    setIsAddModalOpen(true);
+    setEditingEvent(null);
+    setIsEventModalOpen(true);
   };
 
-  const handleAddEvent = (e: FormEvent<HTMLFormElement>) => {
+  const openEditModal = (event: FamilyEvent) => {
+    setEditingEvent(event);
+    setIsEventModalOpen(true);
+  };
+
+  const handleSubmitEvent = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
@@ -108,22 +115,34 @@ const CalendarGridView = ({
       Number(dateParts[2]),
     );
 
-    const newEvent: FamilyEvent = {
-      id: newId(),
+    const data = {
       title: String(formData.get('title') ?? ''),
       date: eventDate,
       time: String(formData.get('time') ?? ''),
       endTime: String(formData.get('endTime') ?? '') || undefined,
       userId: String(formData.get('userId') ?? ''),
-      createdBy: currentUser.id,
     };
 
-    setEvents([...events, newEvent]);
-    setIsAddModalOpen(false);
-    simulateNotifications(
-      'Novo Compromisso (Mês)',
-      `${currentUser.name} marcou "${newEvent.title}".`,
-    );
+    if (editingEvent) {
+      setEvents((prev) => prev.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data } : ev)));
+      simulateNotifications('Compromisso Atualizado (Mês)', `${currentUser.name} atualizou "${data.title}".`);
+    } else {
+      const newEvent: FamilyEvent = { id: newId(), ...data, createdBy: currentUser.id };
+      setEvents((prev) => [...prev, newEvent]);
+      simulateNotifications('Novo Compromisso (Mês)', `${currentUser.name} marcou "${newEvent.title}".`);
+    }
+
+    setIsEventModalOpen(false);
+    setEditingEvent(null);
+  };
+
+  const handleDeleteEvent = () => {
+    if (!editingEvent) return;
+    if (!window.confirm(`Excluir o compromisso "${editingEvent.title}"?`)) return;
+    setEvents((prev) => prev.filter((ev) => ev.id !== editingEvent.id));
+    simulateNotifications('Compromisso Excluído', `"${editingEvent.title}" foi removido.`);
+    setIsEventModalOpen(false);
+    setEditingEvent(null);
   };
 
   return (
@@ -331,16 +350,19 @@ const CalendarGridView = ({
                 .map((event) => {
                   const eventUser = users.find((u) => u.id === event.userId) || currentUser;
                   return (
-                    <div
+                    <button
                       key={event.id}
-                      className="flex items-start gap-3 bg-[#09090b] p-3 rounded-xl border border-zinc-800"
+                      type="button"
+                      onClick={() => openEditModal(event)}
+                      title="Editar / excluir"
+                      className="w-full flex items-start gap-3 bg-[#09090b] p-3 rounded-xl border border-zinc-800 hover:border-zinc-600 transition-colors text-left group"
                     >
                       <Avatar
                         user={eventUser}
                         className="w-10 h-10 rounded-full text-lg shrink-0"
                         style={{ boxShadow: `0 0 0 2px ${eventUser.color}` }}
                       />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="font-bold text-white md:text-lg">{event.title}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
                           <span className="text-zinc-400 text-xs md:text-sm">
@@ -354,7 +376,8 @@ const CalendarGridView = ({
                           </span>
                         </div>
                       </div>
-                    </div>
+                      <Pencil className="w-4 h-4 text-zinc-600 group-hover:text-pink-400 self-center shrink-0" />
+                    </button>
                   );
                 })
             ) : (
@@ -370,10 +393,17 @@ const CalendarGridView = ({
         </Modal>
       )}
 
-      {/* Modal de novo compromisso (mês) */}
-      {isAddModalOpen && (
-        <Modal onClose={() => setIsAddModalOpen(false)} title="Novo Compromisso">
-          <form onSubmit={handleAddEvent} className="space-y-5">
+      {/* Modal de novo/editar compromisso (mês) */}
+      {isEventModalOpen && (
+        <Modal
+          key={editingEvent?.id ?? 'new'}
+          onClose={() => {
+            setIsEventModalOpen(false);
+            setEditingEvent(null);
+          }}
+          title={editingEvent ? 'Editar Compromisso' : 'Novo Compromisso'}
+        >
+          <form onSubmit={handleSubmitEvent} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1.5">Título</label>
               <input
@@ -381,6 +411,7 @@ const CalendarGridView = ({
                 name="title"
                 required
                 placeholder="Ex: Médico, Escola..."
+                defaultValue={editingEvent?.title ?? ''}
                 autoFocus
                 className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all placeholder-zinc-700"
               />
@@ -391,7 +422,7 @@ const CalendarGridView = ({
                 type="date"
                 name="date"
                 required
-                defaultValue={newEventDate}
+                defaultValue={editingEvent ? toDateInput(editingEvent.date) : newEventDate}
                 className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all"
               />
             </div>
@@ -402,6 +433,7 @@ const CalendarGridView = ({
                   type="time"
                   name="time"
                   required
+                  defaultValue={editingEvent?.time ?? ''}
                   className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                 />
               </div>
@@ -410,6 +442,7 @@ const CalendarGridView = ({
                 <input
                   type="time"
                   name="endTime"
+                  defaultValue={editingEvent?.endTime ?? ''}
                   className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                 />
               </div>
@@ -418,7 +451,7 @@ const CalendarGridView = ({
               <label className="block text-sm font-medium text-zinc-400 mb-1.5">Membro Familiar</label>
               <select
                 name="userId"
-                defaultValue={currentUser.id}
+                defaultValue={editingEvent?.userId ?? currentUser.id}
                 className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all appearance-none"
               >
                 {users.map((u) => (
@@ -428,10 +461,22 @@ const CalendarGridView = ({
                 ))}
               </select>
             </div>
+            {editingEvent && (
+              <button
+                type="button"
+                onClick={handleDeleteEvent}
+                className="w-full py-3 bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors font-medium flex items-center justify-center gap-2 text-sm"
+              >
+                <Trash2 className="w-4 h-4" /> Excluir Compromisso
+              </button>
+            )}
             <div className="pt-4 flex gap-3">
               <button
                 type="button"
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => {
+                  setIsEventModalOpen(false);
+                  setEditingEvent(null);
+                }}
                 className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
               >
                 Cancelar
@@ -440,7 +485,7 @@ const CalendarGridView = ({
                 type="submit"
                 className="flex-1 px-4 py-3 bg-pink-500 text-white font-medium rounded-xl hover:bg-pink-400 transition-colors"
               >
-                Salvar
+                {editingEvent ? 'Salvar' : 'Criar'}
               </button>
             </div>
           </form>

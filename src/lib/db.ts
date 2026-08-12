@@ -177,6 +177,15 @@ export const syncEvents = async (events: FamilyEvent[]): Promise<void> => {
   }
 };
 
+export const deleteEvents = async (ids: string[]): Promise<void> => {
+  if (!supabase || ids.length === 0) return;
+  try {
+    await supabase.from('compromissos').delete().in('id', ids);
+  } catch (err) {
+    console.error('[Supabase] Falha ao excluir compromissos:', err);
+  }
+};
+
 export const syncItems = async (items: ShoppingItem[]): Promise<void> => {
   if (!supabase) return;
   try {

@@ -22,7 +22,7 @@ import type { EvolutionConfig, FamilyEvent, ShoppingItem, Toast, ToastType, User
 import { isImageAvatar } from './utils';
 import { getReminderOffset, scheduleEventReminders, setReminderOffset as persistReminderOffset } from './utils/push';
 import type { ReminderOffset } from './utils/push';
-import { deleteUsers, loadFromSupabase, syncEvents, syncItems, syncUsers } from './lib/db';
+import { deleteEvents, deleteUsers, loadFromSupabase, syncEvents, syncItems, syncUsers } from './lib/db';
 
 type Tab = 'calendar' | 'shopping' | 'settings';
 
@@ -107,7 +107,11 @@ const App = () => {
   const setEventsSynced: React.Dispatch<React.SetStateAction<FamilyEvent[]>> = (value) => {
     setEvents((prev) => {
       const next = typeof value === 'function' ? value(prev) : value;
-      if (supabaseReady) syncEvents(next);
+      if (supabaseReady) {
+        const removed = prev.filter((e) => !next.some((n) => n.id === e.id)).map((e) => e.id);
+        syncEvents(next);
+        deleteEvents(removed);
+      }
       return next;
     });
   };
