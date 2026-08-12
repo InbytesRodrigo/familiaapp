@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   Calendar as CalendarIcon,
@@ -24,6 +24,8 @@ import { isImageAvatar } from './utils';
 import { getReminderOffset, scheduleEventReminders, setReminderOffset as persistReminderOffset } from './utils/push';
 import type { ReminderOffset } from './utils/push';
 import { deleteEvents, deleteUsers, loadFromSupabase, syncEvents, syncItems, syncUsers } from './lib/db';
+import type { FamilyData } from './lib/db';
+import { isSupabaseConfigured } from './lib/supabase';
 
 type Tab = 'calendar' | 'shopping' | 'settings';
 
@@ -83,6 +85,20 @@ const App = () => {
   const [events, setEvents] = useState<FamilyEvent[]>(initialEvents);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(initialShoppingItems);
 
+  // Espelhos do estado (para usar em callbacks sem closures antigos)
+  const eventsRef = useRef(events);
+  const usersRef = useRef(users);
+  const itemsRef = useRef(shoppingItems);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+  useEffect(() => {
+    usersRef.current = users;
+  }, [users]);
+  useEffect(() => {
+    itemsRef.current = shoppingItems;
+  }, [shoppingItems]);
+
   // Lembretes de compromissos (Notification Triggers): funcionam com o app fechado
   const [reminderOffset, setReminderOffsetState] = useState<ReminderOffset>(getReminderOffset);
   const setReminderOffset = (value: ReminderOffset) => {
@@ -95,79 +111,110 @@ const App = () => {
     scheduleEventReminders(events);
   }, [events, reminderOffset]);
 
-  // Supabase: carrega os dados salvos e sincroniza as mudanças
-  const [supabaseReady, setSupabaseReady] = useState(false);
+  // ——— Supabase: conexão, carga e sincronização ———
+  // Estado da conexão com o banco (mostra aviso claro se algo não estiver salvando)
+  const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'unconfigured' | 'error'>(
+    () => (isSupabaseConfigured ? 'connecting' : 'unconfigured'),
+  );
 
+  // Último estado já confirmado no banco (para detectar mudanças locais pendentes)
+  const lastEventsRef = useRef<FamilyEvent[]>(initialEvents);
+  const lastUsersRef = useRef<User[]>(initialUsers);
+  const lastItemsRef = useRef<ShoppingItem[]>(initialShoppingItems);
+
+  // Aplica os dados vindos do servidor sem apagar mudanças locais ainda não sincronizadas
+  const applyServerData = (data: FamilyData) => {
+    const hasLocalPending =
+      lastEventsRef.current !== eventsRef.current ||
+      lastUsersRef.current !== usersRef.current ||
+      lastItemsRef.current !== itemsRef.current;
+    if (hasLocalPending) return;
+    lastEventsRef.current = data.events;
+    lastUsersRef.current = data.users;
+    lastItemsRef.current = data.items;
+    setEvents(data.events);
+    setUsers(data.users);
+    setShoppingItems(data.items);
+    setCurrentUserId((cur) => (data.users.some((u) => u.id === cur) ? cur : data.users[0]?.id ?? cur));
+    setConnectionState('connected');
+  };
+
+  // Carga inicial + recarrega quando a aba volta a ficar visível (multi-dispositivo)
   useEffect(() => {
     let alive = true;
-    (async () => {
-      const data = await loadFromSupabase();
-      if (!alive || !data) return;
-      setUsers(data.users);
-      setEvents(data.events);
-      setShoppingItems(data.items);
-      setCurrentUserId((cur) => (data.users.some((u) => u.id === cur) ? cur : data.users[0]?.id ?? cur));
-      setSupabaseReady(true);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
+    let attempts = 0;
+    let timer: number | undefined;
 
-  // Re-sincroniza com o Supabase ao voltar para a aba: mudou em um dispositivo,
-  // aparece no outro (evita a sensação de "não salvou").
-  useEffect(() => {
-    let alive = true;
-    const refresh = async () => {
+    const load = async () => {
       if (document.visibilityState === 'hidden') return;
       const data = await loadFromSupabase();
-      if (!alive || !data) return;
-      setUsers(data.users);
-      setEvents(data.events);
-      setShoppingItems(data.items);
-      setCurrentUserId((cur) => (data.users.some((u) => u.id === cur) ? cur : data.users[0]?.id ?? cur));
+      if (!alive) return;
+      if (data) {
+        attempts = 0;
+        applyServerData(data);
+      } else {
+        setConnectionState(isSupabaseConfigured ? 'error' : 'unconfigured');
+        // Tenta reconectar sozinho (até 5 vezes, a cada 5s)
+        if (attempts < 5) {
+          attempts += 1;
+          timer = window.setTimeout(load, 5000);
+        }
+      }
     };
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', refresh);
+
+    void load();
+    window.addEventListener('focus', load);
+    document.addEventListener('visibilitychange', load);
     return () => {
       alive = false;
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', refresh);
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener('focus', load);
+      document.removeEventListener('visibilitychange', load);
     };
   }, []);
 
-  // Setters que atualizam o estado e gravam no Supabase
-  const setEventsSynced: React.Dispatch<React.SetStateAction<FamilyEvent[]>> = (value) => {
-    setEvents((prev) => {
-      const next = typeof value === 'function' ? value(prev) : value;
-      if (supabaseReady) {
-        const removed = prev.filter((e) => !next.some((n) => n.id === e.id)).map((e) => e.id);
-        syncEvents(next);
-        deleteEvents(removed);
+  // Sincroniza automaticamente cada mudança com o Supabase (com aviso se falhar)
+  useEffect(() => {
+    const prev = lastEventsRef.current;
+    if (prev === events) return;
+    lastEventsRef.current = events;
+    const removed = prev.filter((e) => !events.some((n) => n.id === e.id)).map((e) => e.id);
+    void syncEvents(events).then((ok) => {
+      if (!ok && isSupabaseConfigured) {
+        showNotification('Erro ao salvar', 'Não foi possível salvar os compromissos. Verifique a conexão.', 'error');
       }
-      return next;
     });
-  };
+    if (removed.length > 0) void deleteEvents(removed);
+  }, [events]);
 
-  const setUsersSynced: React.Dispatch<React.SetStateAction<User[]>> = (value) => {
-    setUsers((prev) => {
-      const next = typeof value === 'function' ? value(prev) : value;
-      if (supabaseReady) {
-        const removed = prev.filter((u) => !next.some((n) => n.id === u.id)).map((u) => u.id);
-        syncUsers(next);
-        deleteUsers(removed);
+  useEffect(() => {
+    const prev = lastUsersRef.current;
+    if (prev === users) return;
+    lastUsersRef.current = users;
+    const removed = prev.filter((u) => !users.some((n) => n.id === u.id)).map((u) => u.id);
+    void syncUsers(users).then((ok) => {
+      if (!ok && isSupabaseConfigured) {
+        showNotification('Erro ao salvar', 'Não foi possível salvar os membros da família. Verifique a conexão.', 'error');
       }
-      return next;
     });
-  };
+    if (removed.length > 0) void deleteUsers(removed);
+  }, [users]);
 
-  const setShoppingItemsSynced: React.Dispatch<React.SetStateAction<ShoppingItem[]>> = (value) => {
-    setShoppingItems((prev) => {
-      const next = typeof value === 'function' ? value(prev) : value;
-      if (supabaseReady) syncItems(next);
-      return next;
+  useEffect(() => {
+    const prev = lastItemsRef.current;
+    if (prev === shoppingItems) return;
+    lastItemsRef.current = shoppingItems;
+    void syncItems(shoppingItems).then((ok) => {
+      if (!ok && isSupabaseConfigured) {
+        showNotification('Erro ao salvar', 'Não foi possível salvar o mercado. Verifique a conexão.', 'error');
+      }
     });
-  };
+  }, [shoppingItems]);
+
+  // Setters usados pelas views (a sincronização acontece nos efeitos acima)
+  const setEventsSynced: React.Dispatch<React.SetStateAction<FamilyEvent[]>> = (value) => setEvents(value);
+  const setUsersSynced: React.Dispatch<React.SetStateAction<User[]>> = (value) => setUsers(value);
+  const setShoppingItemsSynced: React.Dispatch<React.SetStateAction<ShoppingItem[]>> = (value) => setShoppingItems(value);
 
   const showNotification = (title: string, message: string, type: ToastType = 'info') => {
     const id = Date.now();
@@ -290,6 +337,17 @@ const App = () => {
 
       {/* Área de conteúdo principal */}
       <div className="flex-1 overflow-hidden flex flex-col relative z-0">
+        {/* Aviso de conexão com o banco (nunca falha em silêncio) */}
+        {(connectionState === 'error' || connectionState === 'unconfigured') && (
+          <div className="shrink-0 px-4 py-2.5 bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-2 z-30 relative">
+            <span aria-hidden>⚠️</span>
+            <span>
+              {connectionState === 'unconfigured'
+                ? 'Sem conexão com o banco de dados: as alterações não serão salvas entre dispositivos.'
+                : 'Sem conexão com o servidor de dados — tentando reconectar. As alterações podem não ser salvas.'}
+            </span>
+          </div>
+        )}
         {/* Toggle de visualização da agenda */}
         {activeTab === 'calendar' && (
           <div className="px-4 pt-4 md:px-10 flex justify-end shrink-0 bg-[#09090b] z-10">

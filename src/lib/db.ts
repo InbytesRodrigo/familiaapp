@@ -150,47 +150,80 @@ const seedInitialData = async (): Promise<FamilyData | null> => {
 
 // ——— Sincronização (upsert total por coleção — listas pequenas) ———
 
-export const syncUsers = async (users: User[]): Promise<void> => {
-  if (!supabase) return;
+/** Envia todos os membros (upsert). Retorna true se gravou com sucesso. */
+export const syncUsers = async (users: User[]): Promise<boolean> => {
+  if (!supabase) return false;
   try {
-    await supabase.from('familia').upsert(users.map(userToDb));
+    const { error } = await supabase.from('familia').upsert(users.map(userToDb));
+    if (error) {
+      console.error('[Supabase] Falha ao sincronizar família:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('[Supabase] Falha ao sincronizar família:', err);
+    return false;
   }
 };
 
-export const deleteUsers = async (ids: string[]): Promise<void> => {
-  if (!supabase || ids.length === 0) return;
+export const deleteUsers = async (ids: string[]): Promise<boolean> => {
+  if (!supabase || ids.length === 0) return true;
   try {
-    await supabase.from('familia').delete().in('id', ids);
+    const { error } = await supabase.from('familia').delete().in('id', ids);
+    if (error) {
+      console.error('[Supabase] Falha ao remover membros:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('[Supabase] Falha ao remover membros:', err);
+    return false;
   }
 };
 
-export const syncEvents = async (events: FamilyEvent[]): Promise<void> => {
-  if (!supabase) return;
+/** Envia todos os compromissos (upsert). Retorna true se gravou com sucesso. */
+export const syncEvents = async (events: FamilyEvent[]): Promise<boolean> => {
+  if (!supabase) return false;
   try {
-    await supabase.from('compromissos').upsert(events.map(eventToDb));
+    const { error } = await supabase.from('compromissos').upsert(events.map(eventToDb));
+    if (error) {
+      console.error('[Supabase] Falha ao sincronizar compromissos:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('[Supabase] Falha ao sincronizar compromissos:', err);
+    return false;
   }
 };
 
-export const deleteEvents = async (ids: string[]): Promise<void> => {
-  if (!supabase || ids.length === 0) return;
+export const deleteEvents = async (ids: string[]): Promise<boolean> => {
+  if (!supabase || ids.length === 0) return true;
   try {
-    await supabase.from('compromissos').delete().in('id', ids);
+    const { error } = await supabase.from('compromissos').delete().in('id', ids);
+    if (error) {
+      console.error('[Supabase] Falha ao excluir compromissos:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('[Supabase] Falha ao excluir compromissos:', err);
+    return false;
   }
 };
 
-export const syncItems = async (items: ShoppingItem[]): Promise<void> => {
-  if (!supabase) return;
+/** Envia todos os itens do mercado (upsert). Retorna true se gravou com sucesso. */
+export const syncItems = async (items: ShoppingItem[]): Promise<boolean> => {
+  if (!supabase) return false;
   try {
-    await supabase.from('mercado').upsert(items.map(itemToDb));
+    const { error } = await supabase.from('mercado').upsert(items.map(itemToDb));
+    if (error) {
+      console.error('[Supabase] Falha ao sincronizar mercado:', error.message);
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error('[Supabase] Falha ao sincronizar mercado:', err);
+    return false;
   }
 };
