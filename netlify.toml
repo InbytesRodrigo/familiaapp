@@ -1,0 +1,9 @@
+# FamíliaApp — configuração de build para o Netlify
+# O app funciona em qualquer hospedagem: para salvar os dados, ou
+# 1) configure as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
+#    em Site settings → Environment variables (recomendado), ou
+# 2) conecte o banco em Configurações → Banco de Dados dentro do próprio app.
+
+[build]
+  command = "npm run build"
+  publish = "dist"

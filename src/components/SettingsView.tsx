@@ -9,6 +9,11 @@ import type { EvolutionConfig, ToastType, User } from '../types';
 import { isImageAvatar } from '../utils';
 import { newId } from '../lib/db';
 import {
+  clearSupabaseConnection,
+  getConnectionConfig,
+  setSupabaseConnection,
+} from '../lib/supabase';
+import {
   getStoredSubscription,
   getVapidKey,
   isScheduledSupported,
@@ -33,6 +38,8 @@ interface SettingsViewProps {
   showNotification: (title: string, message: string, type?: ToastType) => void;
   logoVariant: LogoVariant;
   setLogoVariant: (value: LogoVariant) => void;
+  connectionState: 'connecting' | 'connected' | 'unconfigured' | 'error';
+  onConnectionSaved: () => void;
 }
 
 const MAX_PHOTO_SIZE = 2 * 1024 * 1024; // 2MB
@@ -49,6 +56,8 @@ const SettingsView = ({
   showNotification,
   logoVariant,
   setLogoVariant,
+  connectionState,
+  onConnectionSaved,
 }: SettingsViewProps) => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -57,6 +66,29 @@ const SettingsView = ({
   const [vapidKeyInput, setVapidKeyInput] = useState(getVapidKey);
   const [isSubscribed, setIsSubscribed] = useState(() => !!getStoredSubscription());
   const [scheduledSupported, setScheduledSupported] = useState<boolean | null>(null);
+
+  // Conexão com o banco (Supabase) configurável em tempo de execução
+  const initialConn = getConnectionConfig();
+  const [connUrl, setConnUrl] = useState(initialConn.url);
+  const [connAnonKey, setConnAnonKey] = useState(initialConn.anonKey);
+
+  const handleSaveConnection = () => {
+    const saved = setSupabaseConnection(connUrl, connAnonKey);
+    if (!saved) {
+      showNotification('Erro', 'Preencha a URL e a chave anon do seu Supabase.', 'error');
+      return;
+    }
+    showNotification('Conectado!', 'Banco de dados conectado. Carregando seus dados...', 'success');
+    onConnectionSaved();
+  };
+
+  const handleDisconnect = () => {
+    clearSupabaseConnection();
+    setConnUrl('');
+    setConnAnonKey('');
+    showNotification('Desconectado', 'Conexão manual removida. Usando a configuração do site (se houver).', 'info');
+    onConnectionSaved();
+  };
 
   // Descobre (via service worker) se lembretes agendados com o app fechado são suportados
   useEffect(() => {
@@ -295,6 +327,73 @@ const SettingsView = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Seção: Banco de Dados */}
+        <div>
+          <h2 className="text-xl font-bold text-white mb-1">Banco de Dados</h2>
+          <p className="text-sm text-zinc-500 mb-4">
+            Conexão com o Supabase onde a agenda, o mercado e a família ficam salvos. Funciona em qualquer
+            hospedagem (Netlify, GitHub Pages etc.) — é só colar as chaves uma vez em cada navegador.
+          </p>
+          <div className="bg-[#121214] p-5 rounded-3xl border border-zinc-800">
+            <div className="flex items-center gap-2 mb-4">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  connectionState === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
+              />
+              <span className="text-sm font-bold text-white">
+                {connectionState === 'connected'
+                  ? 'Conectado ao banco de dados'
+                  : 'Sem conexão com o banco de dados'}
+              </span>
+              {initialConn.fromEnv && connectionState === 'connected' && (
+                <span className="text-[10px] text-zinc-500 font-medium">(configurado pelo site)</span>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1.5">Project URL</label>
+                <input
+                  type="url"
+                  value={connUrl}
+                  onChange={(e) => setConnUrl(e.target.value)}
+                  placeholder="https://xxxx.supabase.co"
+                  className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all placeholder-zinc-700 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1.5">Chave anon / public</label>
+                <input
+                  type="password"
+                  value={connAnonKey}
+                  onChange={(e) => setConnAnonKey(e.target.value)}
+                  placeholder="eyJhbGciOi..."
+                  className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all placeholder-zinc-700 text-sm"
+                />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={handleSaveConnection}
+                  className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-xl transition-colors"
+                >
+                  Conectar / Salvar
+                </button>
+                <button
+                  onClick={handleDisconnect}
+                  className="px-4 py-3 border border-zinc-700 text-zinc-300 text-sm rounded-xl hover:bg-zinc-800 transition-colors"
+                >
+                  Desconectar
+                </button>
+              </div>
+              <p className="text-[10px] text-zinc-500 leading-relaxed">
+                Onde achar: Supabase → Project Settings → API. A chave anon é pública por design (segura para
+                ficar no app); quem protege os dados são as políticas de segurança do banco.
+              </p>
+            </div>
           </div>
         </div>
 

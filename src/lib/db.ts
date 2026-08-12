@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getSupabase } from './supabase';
 import { initialEvents, initialShoppingItems, initialUsers } from '../data/initialData';
 import type { FamilyEvent, ShoppingItem, User } from '../types';
 
@@ -81,6 +81,7 @@ export interface FamilyData {
 
 /** Carrega tudo do Supabase; semeia os dados iniciais se o banco estiver vazio. Retorna null se não configurado. */
 export const loadFromSupabase = async (): Promise<FamilyData | null> => {
+  const supabase = getSupabase();
   if (!supabase) return null;
   try {
     const [u, e, i] = await Promise.all([
@@ -107,6 +108,7 @@ export const loadFromSupabase = async (): Promise<FamilyData | null> => {
 };
 
 const seedInitialData = async (): Promise<FamilyData | null> => {
+  const supabase = getSupabase();
   if (!supabase) return null;
   try {
     const users: User[] = initialUsers.map((u) => ({ ...u, id: newId() }));
@@ -152,6 +154,7 @@ const seedInitialData = async (): Promise<FamilyData | null> => {
 
 /** Envia todos os membros (upsert). Retorna true se gravou com sucesso. */
 export const syncUsers = async (users: User[]): Promise<boolean> => {
+  const supabase = getSupabase();
   if (!supabase) return false;
   try {
     const { error } = await supabase.from('familia').upsert(users.map(userToDb));
@@ -167,6 +170,7 @@ export const syncUsers = async (users: User[]): Promise<boolean> => {
 };
 
 export const deleteUsers = async (ids: string[]): Promise<boolean> => {
+  const supabase = getSupabase();
   if (!supabase || ids.length === 0) return true;
   try {
     const { error } = await supabase.from('familia').delete().in('id', ids);
@@ -183,6 +187,7 @@ export const deleteUsers = async (ids: string[]): Promise<boolean> => {
 
 /** Envia todos os compromissos (upsert). Retorna true se gravou com sucesso. */
 export const syncEvents = async (events: FamilyEvent[]): Promise<boolean> => {
+  const supabase = getSupabase();
   if (!supabase) return false;
   try {
     const { error } = await supabase.from('compromissos').upsert(events.map(eventToDb));
@@ -198,6 +203,7 @@ export const syncEvents = async (events: FamilyEvent[]): Promise<boolean> => {
 };
 
 export const deleteEvents = async (ids: string[]): Promise<boolean> => {
+  const supabase = getSupabase();
   if (!supabase || ids.length === 0) return true;
   try {
     const { error } = await supabase.from('compromissos').delete().in('id', ids);
@@ -214,6 +220,7 @@ export const deleteEvents = async (ids: string[]): Promise<boolean> => {
 
 /** Envia todos os itens do mercado (upsert). Retorna true se gravou com sucesso. */
 export const syncItems = async (items: ShoppingItem[]): Promise<boolean> => {
+  const supabase = getSupabase();
   if (!supabase) return false;
   try {
     const { error } = await supabase.from('mercado').upsert(items.map(itemToDb));

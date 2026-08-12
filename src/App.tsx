@@ -114,8 +114,10 @@ const App = () => {
   // ——— Supabase: conexão, carga e sincronização ———
   // Estado da conexão com o banco (mostra aviso claro se algo não estiver salvando)
   const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'unconfigured' | 'error'>(
-    () => (isSupabaseConfigured ? 'connecting' : 'unconfigured'),
+    () => (isSupabaseConfigured() ? 'connecting' : 'unconfigured'),
   );
+  // Incrementa para recarregar os dados quando a conexão mudar (ex.: usuário conectou nas Configurações)
+  const [connSetup, setConnSetup] = useState(0);
 
   // Último estado já confirmado no banco (para detectar mudanças locais pendentes)
   const lastEventsRef = useRef<FamilyEvent[]>(initialEvents);
@@ -153,7 +155,7 @@ const App = () => {
         attempts = 0;
         applyServerData(data);
       } else {
-        setConnectionState(isSupabaseConfigured ? 'error' : 'unconfigured');
+        setConnectionState(isSupabaseConfigured() ? 'error' : 'unconfigured');
         // Tenta reconectar sozinho (até 5 vezes, a cada 5s)
         if (attempts < 5) {
           attempts += 1;
@@ -171,7 +173,8 @@ const App = () => {
       window.removeEventListener('focus', load);
       document.removeEventListener('visibilitychange', load);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connSetup]);
 
   // Sincroniza automaticamente cada mudança com o Supabase (com aviso se falhar)
   useEffect(() => {
@@ -180,7 +183,7 @@ const App = () => {
     lastEventsRef.current = events;
     const removed = prev.filter((e) => !events.some((n) => n.id === e.id)).map((e) => e.id);
     void syncEvents(events).then((ok) => {
-      if (!ok && isSupabaseConfigured) {
+      if (!ok && isSupabaseConfigured()) {
         showNotification('Erro ao salvar', 'Não foi possível salvar os compromissos. Verifique a conexão.', 'error');
       }
     });
@@ -193,7 +196,7 @@ const App = () => {
     lastUsersRef.current = users;
     const removed = prev.filter((u) => !users.some((n) => n.id === u.id)).map((u) => u.id);
     void syncUsers(users).then((ok) => {
-      if (!ok && isSupabaseConfigured) {
+      if (!ok && isSupabaseConfigured()) {
         showNotification('Erro ao salvar', 'Não foi possível salvar os membros da família. Verifique a conexão.', 'error');
       }
     });
@@ -205,7 +208,7 @@ const App = () => {
     if (prev === shoppingItems) return;
     lastItemsRef.current = shoppingItems;
     void syncItems(shoppingItems).then((ok) => {
-      if (!ok && isSupabaseConfigured) {
+      if (!ok && isSupabaseConfigured()) {
         showNotification('Erro ao salvar', 'Não foi possível salvar o mercado. Verifique a conexão.', 'error');
       }
     });
@@ -341,11 +344,19 @@ const App = () => {
         {(connectionState === 'error' || connectionState === 'unconfigured') && (
           <div className="shrink-0 px-4 py-2.5 bg-amber-500/15 border-b border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-2 z-30 relative">
             <span aria-hidden>⚠️</span>
-            <span>
+            <span className="flex-1">
               {connectionState === 'unconfigured'
                 ? 'Sem conexão com o banco de dados: as alterações não serão salvas entre dispositivos.'
                 : 'Sem conexão com o servidor de dados — tentando reconectar. As alterações podem não ser salvas.'}
             </span>
+            {connectionState === 'unconfigured' && (
+              <button
+                onClick={() => setActiveTab('settings')}
+                className="shrink-0 px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 font-bold transition-colors"
+              >
+                Configurar
+              </button>
+            )}
           </div>
         )}
         {/* Toggle de visualização da agenda */}
@@ -413,6 +424,8 @@ const App = () => {
             showNotification={showNotification}
             logoVariant={logoVariant}
             setLogoVariant={setLogoVariant}
+            connectionState={connectionState}
+            onConnectionSaved={() => setConnSetup((n) => n + 1)}
           />
         )}
       </div>
