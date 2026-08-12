@@ -1,6 +1,6 @@
 import { getSupabase } from './supabase';
 import { initialEvents, initialShoppingItems, initialUsers } from '../data/initialData';
-import type { FamilyEvent, ShoppingItem, User } from '../types';
+import type { Aviso, FamilyEvent, MetodoLembrete, ShoppingItem, User } from '../types';
 
 const SEEDED_KEY = 'familiaapp:seeded';
 
@@ -60,6 +60,7 @@ const itemToDb = (i: ShoppingItem): Row => ({
   preco: i.price,
   comprado: i.archived,
   membro_id: i.userId,
+  data: i.date ?? null,
 });
 
 const dbToItem = (row: Row): ShoppingItem => ({
@@ -69,6 +70,7 @@ const dbToItem = (row: Row): ShoppingItem => ({
   price: Number(row.preco ?? 0),
   archived: Boolean(row.comprado),
   userId: String(row.membro_id ?? ''),
+  date: row.data ? String(row.data) : undefined,
 });
 
 // ——— Carga inicial + seed dos dados demo ———
@@ -232,6 +234,135 @@ export const syncItems = async (items: ShoppingItem[]): Promise<boolean> => {
   } catch (err) {
     console.error('[Supabase] Falha ao sincronizar mercado:', err);
     return false;
+  }
+};
+
+// ——— Avisos entre membros (lido/não lido, com foto do remetente) ———
+
+const avisoToDb = (a: Aviso): Row => ({
+  id: a.id,
+  titulo: a.titulo,
+  mensagem: a.mensagem,
+  de_id: a.deId,
+  para_id: a.paraId,
+  tipo: a.tipo,
+  ref_id: a.refId ?? null,
+  lida: a.lida,
+  criado_em: a.criadoEm,
+});
+
+const dbToAviso = (row: Row): Aviso => ({
+  id: String(row.id),
+  titulo: String(row.titulo ?? ''),
+  mensagem: String(row.mensagem ?? ''),
+  deId: String(row.de_id ?? ''),
+  paraId: String(row.para_id ?? 'all'),
+  tipo: (String(row.tipo ?? 'aviso') as Aviso['tipo']) || 'aviso',
+  refId: row.ref_id ? String(row.ref_id) : undefined,
+  lida: Boolean(row.lida),
+  criadoEm: String(row.criado_em ?? ''),
+});
+
+/** Carrega os avisos (mais recentes primeiro). */
+export const loadAvisos = async (): Promise<Aviso[]> => {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('avisos')
+      .select('*')
+      .order('criado_em', { ascending: false })
+      .limit(100);
+    if (error) {
+      console.error('[Supabase] Falha ao carregar avisos:', error.message);
+      return [];
+    }
+    return (data ?? []).map(dbToAviso);
+  } catch (err) {
+    console.error('[Supabase] Falha ao carregar avisos:', err);
+    return [];
+  }
+};
+
+/** Grava um aviso novo (upsert). Retorna o aviso salvo ou null. */
+export const saveAviso = async (aviso: Aviso): Promise<Aviso | null> => {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('avisos')
+      .upsert(avisoToDb(aviso))
+      .select()
+      .single();
+    if (error) {
+      console.error('[Supabase] Falha ao salvar aviso:', error.message);
+      return null;
+    }
+    return dbToAviso(data);
+  } catch (err) {
+    console.error('[Supabase] Falha ao salvar aviso:', err);
+    return null;
+  }
+};
+
+/** Marca um aviso como lido. */
+export const markAvisoLida = async (id: string): Promise<void> => {
+  const supabase = getSupabase();
+  if (!supabase || !id) return;
+  try {
+    await supabase.from('avisos').update({ lida: true }).eq('id', id);
+  } catch (err) {
+    console.error('[Supabase] Falha ao marcar aviso como lido:', err);
+  }
+};
+
+/** Marca todos os avisos como lidos. */
+export const markAllAvisosLidas = async (): Promise<void> => {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  try {
+    await supabase.from('avisos').update({ lida: true }).eq('lida', false);
+  } catch (err) {
+    console.error('[Supabase] Falha ao marcar avisos como lidos:', err);
+  }
+};
+
+// ——— Configuração do app (métodos de lembrete, etc.) ———
+
+const LEMBRETES_CONFIG_KEY = 'lembretes';
+
+/** Salva os métodos de lembrete no banco (o cron do servidor lê daqui). */
+export const saveMetodosLembrete = async (metodos: MetodoLembrete[]): Promise<void> => {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  try {
+    await supabase.from('configuracao').upsert({
+      chave: LEMBRETES_CONFIG_KEY,
+      valor: metodos.map((m) => ({ minutosAntes: m.minutosAntes })),
+    });
+  } catch (err) {
+    console.error('[Supabase] Falha ao salvar configuração de lembretes:', err);
+  }
+};
+
+/** Lê os métodos de lembrete salvos no banco (para usar ao abrir em outro aparelho). */
+export const loadMetodosLembrete = async (): Promise<MetodoLembrete[]> => {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('configuracao')
+      .select('valor')
+      .eq('chave', LEMBRETES_CONFIG_KEY)
+      .maybeSingle();
+    if (error || !data?.valor) return [];
+    const list = data.valor as { minutosAntes?: number }[];
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter((m) => typeof m.minutosAntes === 'number' && m.minutosAntes > 0)
+      .map((m) => ({ id: crypto.randomUUID(), minutosAntes: m.minutosAntes as number }));
+  } catch {
+    return [];
   }
 };
 

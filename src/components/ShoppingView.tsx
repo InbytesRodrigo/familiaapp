@@ -1,9 +1,22 @@
 import { useState } from 'react';
-import { Archive, Check, DollarSign, Plus, ShoppingCart } from 'lucide-react';
+import { Archive, Calendar as CalendarIcon, Check, DollarSign, Plus, ShoppingCart } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import { newId } from '../lib/db';
 import type { Notify, ShoppingItem, User } from '../types';
+
+/** YYYY-MM-DD → DD/MM (rótulo do item com data). */
+const formatDateBR = (date: string): string => {
+  const [, m, d] = date.split('-');
+  return `${d}/${m}`;
+};
+
+/** True se a data do item é hoje (destaca na lista). */
+const isItemDateToday = (date: string): boolean => {
+  const now = new Date();
+  const [y, m, d] = date.split('-').map(Number);
+  return now.getFullYear() === y && now.getMonth() === m - 1 && now.getDate() === d;
+};
 
 interface ShoppingViewProps {
   items: ShoppingItem[];
@@ -23,6 +36,7 @@ const ShoppingView = ({
   const [newItemName, setNewItemName] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState(1);
   const [newItemPrice, setNewItemPrice] = useState('');
+  const [newItemDate, setNewItemDate] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -51,6 +65,7 @@ const ShoppingView = ({
                 quantity: newItemQuantity,
                 price: parseFloat(newItemPrice) || i.price,
                 userId: currentUser.id,
+                date: newItemDate || i.date,
               }
             : i,
         ),
@@ -58,6 +73,9 @@ const ShoppingView = ({
       simulateNotifications(
         'Mercado Atualizado',
         `${currentUser.name} recolocou "${existingArchived.name}" na lista.`,
+        'all',
+        'mercado',
+        existingArchived.id,
       );
     } else {
       const newItem: ShoppingItem = {
@@ -67,20 +85,30 @@ const ShoppingView = ({
         price: parseFloat(newItemPrice) || 0,
         archived: false,
         userId: currentUser.id,
+        date: newItemDate || undefined,
       };
       setItems([...items, newItem]);
-      simulateNotifications('Nova Compra', `${currentUser.name} adicionou "${newItem.name}" ao mercado.`);
+      simulateNotifications(
+        'Nova Compra',
+        `${currentUser.name} adicionou "${newItem.name}" ao mercado${newItemDate ? ` (para ${formatDateBR(newItemDate)})` : ''}.`,
+        'all',
+        'mercado',
+        newItem.id,
+      );
     }
 
     setNewItemName('');
     setNewItemQuantity(1);
     setNewItemPrice('');
+    setNewItemDate('');
     setIsFormOpen(false);
   };
 
   const toggleArchive = (id: string, name: string, isArchiving: boolean) => {
     setItems(items.map((i) => (i.id === id ? { ...i, archived: isArchiving } : i)));
-    if (isArchiving) simulateNotifications('Item Comprado', `${currentUser.name} comprou "${name}".`);
+    if (isArchiving) {
+      simulateNotifications('Item Comprado', `${currentUser.name} comprou "${name}".`, 'all', 'mercado', id);
+    }
   };
 
   return (
@@ -128,10 +156,21 @@ const ShoppingView = ({
                   </button>
                   <div className="flex-1 truncate">
                     <p className="font-bold text-white truncate">{item.name}</p>
-                    <div className="flex items-center gap-3 mt-0.5">
+                    <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                       <span className="text-xs text-zinc-500">
                         {item.quantity}x • R$ {item.price.toFixed(2)}
                       </span>
+                      {item.date && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded border font-bold flex items-center gap-1 ${
+                            isItemDateToday(item.date)
+                              ? 'border-pink-500 bg-pink-500/15 text-pink-400'
+                              : 'border-pink-500/40 text-pink-400/80'
+                          }`}
+                        >
+                          <CalendarIcon className="w-3 h-3" /> {formatDateBR(item.date)}
+                        </span>
+                      )}
                       <span
                         className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-800 font-bold"
                         style={{ color: itemUser.color, backgroundColor: `${itemUser.color}15` }}
@@ -259,6 +298,17 @@ const ShoppingView = ({
                   className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+                Data (opcional) <span className="text-zinc-600">— precisa para este dia</span>
+              </label>
+              <input
+                type="date"
+                value={newItemDate}
+                onChange={(e) => setNewItemDate(e.target.value)}
+                className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+              />
             </div>
           </form>
         </Modal>

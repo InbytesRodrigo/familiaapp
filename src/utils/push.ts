@@ -1,17 +1,48 @@
 /* Utilitários de notificações push e lembretes agendados. */
 
-const REMINDER_OFFSET_KEY = 'familiapp:reminder-offset';
+const METODOS_KEY = 'familiapp:metodos-lembrete';
 const VAPID_KEY = 'familiapp:vapid-key';
 const SUBSCRIPTION_KEY = 'familiapp:push-subscription';
 
-export type ReminderOffset = 0 | 15 | 60 | 1440; // minutos antes (0 = desligado)
+import { METODO_LEMBRETE_OPTIONS } from '../types';
+import type { MetodoLembrete, ShoppingItem } from '../types';
+import { newId } from '../lib/db';
 
-export const REMINDER_OPTIONS: { value: ReminderOffset; label: string }[] = [
-  { value: 0, label: 'Desligado' },
-  { value: 15, label: '15 minutos antes' },
-  { value: 60, label: '1 hora antes' },
-  { value: 1440, label: '1 dia antes' },
-];
+export const getMetodoOptions = () => METODO_LEMBRETE_OPTIONS;
+
+/**
+ * Métodos de lembrete configurados (cada um = "avisar X minutos antes").
+ * Padrão: 1 dia, 1 hora e 15 minutos antes.
+ */
+export const getMetodosLembrete = (): MetodoLembrete[] => {
+  try {
+    const raw = localStorage.getItem(METODOS_KEY);
+    if (raw) {
+      const list = JSON.parse(raw) as { id?: string; minutosAntes?: number }[];
+      if (Array.isArray(list)) {
+        const valid = list
+          .filter((m) => typeof m.minutosAntes === 'number' && m.minutosAntes > 0)
+          .map((m) => ({ id: m.id || newId(), minutosAntes: m.minutosAntes! }));
+        if (valid.length > 0) return valid;
+      }
+    }
+  } catch {
+    /* JSON inválido — usa o padrão */
+  }
+  return [
+    { id: newId(), minutosAntes: 1440 },
+    { id: newId(), minutosAntes: 60 },
+    { id: newId(), minutosAntes: 15 },
+  ];
+};
+
+export const setMetodosLembrete = (metodos: MetodoLembrete[]): void => {
+  try {
+    localStorage.setItem(METODOS_KEY, JSON.stringify(metodos));
+  } catch {
+    /* armazenamento indisponível */
+  }
+};
 
 /** O navegador suporta service worker + push. */
 export const isPushSupported = (): boolean =>
@@ -41,14 +72,6 @@ export const isScheduledSupported = (): Promise<boolean> =>
     });
   });
 
-export const getReminderOffset = (): ReminderOffset => {
-  const n = Number(localStorage.getItem(REMINDER_OFFSET_KEY) ?? '0');
-  return REMINDER_OPTIONS.some((o) => o.value === n) ? (n as ReminderOffset) : 0;
-};
-
-export const setReminderOffset = (value: ReminderOffset): void => {
-  localStorage.setItem(REMINDER_OFFSET_KEY, String(value));
-};
 
 /** Pede permissão de notificação; retorna true se concedida. */
 export const requestPushPermission = async (): Promise<boolean> => {
@@ -85,33 +108,55 @@ interface ReminderEventLike {
 }
 
 /**
- * Calcula os lembretes desejados a partir dos eventos e envia ao service worker,
- * que agenda via Notification Triggers (disparam mesmo com o app fechado).
- * Deve ser chamado sempre que os eventos mudarem.
+ * Calcula os lembretes desejados a partir dos eventos (um por método configurado)
+ * e envia ao service worker, que agenda via Notification Triggers
+ * (disparam mesmo com o app fechado). Também agenda os itens do mercado
+ * que têm data específica.
  */
-export const scheduleEventReminders = async (events: ReminderEventLike[]): Promise<void> => {
-  const offset = getReminderOffset();
+export const scheduleEventReminders = async (
+  events: ReminderEventLike[],
+  items: ShoppingItem[],
+): Promise<void> => {
+  const metodos = getMetodosLembrete();
   const sw = await getServiceWorker();
   if (!sw || !sw.active) return;
 
   const specs: ReminderSpec[] = [];
-  if (offset > 0) {
-    const now = Date.now();
-    const horizon = now + 30 * 24 * 60 * 60 * 1000; // próximos 30 dias
-    for (const e of events) {
-      const [h, m] = e.time.split(':').map(Number);
-      if (Number.isNaN(h) || Number.isNaN(m)) continue;
-      const at =
-        new Date(e.date.getFullYear(), e.date.getMonth(), e.date.getDate(), h, m).getTime() -
-        offset * 60 * 1000;
+  const now = Date.now();
+  const horizon = now + 45 * 24 * 60 * 60 * 1000; // próximos 45 dias
+
+  // Compromissos: um lembrete para cada método ("quantas vezes, quanto antes")
+  for (const e of events) {
+    const [h, m] = e.time.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) continue;
+    const start =
+      new Date(e.date.getFullYear(), e.date.getMonth(), e.date.getDate(), h, m).getTime();
+    for (const metodo of metodos) {
+      const at = start - metodo.minutosAntes * 60 * 1000;
       if (at > now && at < horizon) {
         specs.push({
-          id: `ev-${e.id}`,
+          id: `ev-${e.id}-${metodo.minutosAntes}`,
           at,
           title: `Lembrete: ${e.title}`,
           body: `Começa às ${e.time} — FamíliaApp.`,
         });
       }
+    }
+  }
+
+  // Mercado: item com data específica -> lembrete às 09:00 do dia
+  for (const item of items) {
+    if (item.archived || !item.date) continue;
+    const [y, mo, d] = item.date.split('-').map(Number);
+    if (Number.isNaN(y) || Number.isNaN(mo) || Number.isNaN(d)) continue;
+    const at = new Date(y, mo - 1, d, 9, 0).getTime();
+    if (at > now && at < horizon) {
+      specs.push({
+        id: `item-${item.id}`,
+        at,
+        title: 'Lembrete de mercado',
+        body: `Hoje: "${item.name}" está na lista de compras.`,
+      });
     }
   }
 

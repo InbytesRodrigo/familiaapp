@@ -5,7 +5,7 @@ import Avatar from './Avatar';
 import Logo from './Logo';
 import type { LogoVariant } from './Logo';
 import Modal from './Modal';
-import type { EvolutionConfig, ToastType, User } from '../types';
+import type { EvolutionConfig, MetodoLembrete, ToastType, User } from '../types';
 import { isImageAvatar } from '../utils';
 import { newId } from '../lib/db';
 import {
@@ -16,16 +16,15 @@ import {
 import { deletePushSubscription, getVapidPublicKey, savePushSubscription } from '../lib/db';
 import {
   clearStoredSubscription,
+  getMetodoOptions,
   getServiceWorker,
   getStoredSubscription,
   isScheduledSupported,
-  REMINDER_OPTIONS,
   requestPushPermission,
   sendScheduledTest,
   sendTestNotification,
   subscribeToPush,
 } from '../utils/push';
-import type { ReminderOffset } from '../utils/push';
 
 interface SettingsViewProps {
   users: User[];
@@ -33,8 +32,8 @@ interface SettingsViewProps {
   evolutionConfig: EvolutionConfig;
   setEvolutionConfig: React.Dispatch<React.SetStateAction<EvolutionConfig>>;
   setPushGranted: React.Dispatch<React.SetStateAction<boolean>>;
-  reminderOffset: ReminderOffset;
-  setReminderOffset: (value: ReminderOffset) => void;
+  metodosLembrete: MetodoLembrete[];
+  setMetodosLembrete: (metodos: MetodoLembrete[]) => void;
   showNotification: (title: string, message: string, type?: ToastType) => void;
   logoVariant: LogoVariant;
   setLogoVariant: (value: LogoVariant) => void;
@@ -50,8 +49,8 @@ const SettingsView = ({
   evolutionConfig,
   setEvolutionConfig,
   setPushGranted,
-  reminderOffset,
-  setReminderOffset,
+  metodosLembrete,
+  setMetodosLembrete,
   showNotification,
   logoVariant,
   setLogoVariant,
@@ -501,65 +500,99 @@ const SettingsView = ({
                   {pushBusy ? 'Ativando...' : 'Ativar push neste aparelho'}
                 </button>
               ) : (
-                <div className="w-full space-y-4">
-                  <p className="text-[11px] text-emerald-400/90 flex items-center gap-1.5">
-                    <span aria-hidden>✓</span> Ativo neste aparelho — você recebe os avisos da família mesmo
-                    com o app fechado ou instalado como PWA.
-                  </p>
+                <p className="mt-2 text-[11px] text-emerald-400/90 flex items-center gap-1.5">
+                  <span aria-hidden>✓</span> Ativo neste aparelho — você recebe os avisos da família mesmo
+                  com o app fechado ou instalado como PWA.
+                </p>
+              )}
 
-                  {/* Lembretes de compromissos */}
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                      Lembretes de compromissos
-                    </label>
-                    <select
-                      value={reminderOffset}
-                      onChange={(e) => setReminderOffset(Number(e.target.value) as ReminderOffset)}
-                      className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none"
-                    >
-                      {REMINDER_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                    {scheduledSupported === false ? (
-                      <p className="text-[10px] text-amber-500/80 mt-1 leading-relaxed">
-                        Seu navegador não suporta lembretes com o app fechado. O push de servidor continua
-                        funcionando em qualquer aparelho.
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
-                        Disparam mesmo com o app fechado, em qualquer compromisso dos próximos 30 dias.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Testes */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={handleTestNow}
-                      className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl transition-colors"
-                    >
-                      Testar agora
-                    </button>
-                    {scheduledSupported !== false && (
-                      <button
-                        onClick={handleTestScheduled}
-                        className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl transition-colors"
+              {/* Métodos de lembrete (admin): quando e quantas vezes avisar — sempre visível */}
+              <div className="w-full">
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  Métodos de lembrete — quando avisar
+                </label>
+                <div className="space-y-2">
+                  {metodosLembrete.length === 0 && (
+                    <p className="text-[10px] text-zinc-500">Nenhum lembrete configurado.</p>
+                  )}
+                  {metodosLembrete.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2">
+                      <select
+                        value={m.minutosAntes}
+                        onChange={(e) =>
+                          setMetodosLembrete(
+                            metodosLembrete.map((x) =>
+                              x.id === m.id
+                                ? { ...x, minutosAntes: Number(e.target.value) }
+                                : x,
+                            ),
+                          )
+                        }
+                        className="flex-1 p-2.5 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none text-xs"
                       >
-                        Testar em 15s
+                        {getMetodoOptions().map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() =>
+                          setMetodosLembrete(metodosLembrete.filter((x) => x.id !== m.id))
+                        }
+                        className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors shrink-0"
+                        title="Remover este lembrete"
+                      >
+                        <X className="w-4 h-4" />
                       </button>
-                    )}
-                  </div>
-
+                    </div>
+                  ))}
                   <button
-                    onClick={handleDisablePush}
-                    className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-sm font-medium rounded-xl transition-colors"
+                    onClick={() =>
+                      setMetodosLembrete([...metodosLembrete, { id: newId(), minutosAntes: 60 }])
+                    }
+                    className="w-full py-2.5 border border-dashed border-zinc-700 text-zinc-400 hover:text-white hover:border-pink-500/50 text-xs font-medium rounded-xl transition-colors"
                   >
-                    Desativar push neste aparelho
+                    + Adicionar outro aviso
                   </button>
                 </div>
+                <p className="text-[10px] text-zinc-500 mt-1.5 leading-relaxed">
+                  Cada linha avisa uma vez no horário escolhido. Vale para todos os compromissos e para
+                  itens do mercado com data — a notificação chega mesmo com o app fechado.
+                </p>
+                {scheduledSupported === false && (
+                  <p className="text-[10px] text-amber-500/80 mt-1 leading-relaxed">
+                    Neste navegador os lembretes com o app fechado dependem do push de servidor. No Chrome do
+                    Android eles também funcionam direto no aparelho.
+                  </p>
+                )}
+              </div>
+
+              {/* Testes */}
+              <div className="grid grid-cols-2 gap-2 w-full">
+                <button
+                  onClick={handleTestNow}
+                  className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl transition-colors"
+                >
+                  Testar agora
+                </button>
+                {scheduledSupported !== false && (
+                  <button
+                    onClick={handleTestScheduled}
+                    className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl transition-colors"
+                  >
+                    Testar em 15s
+                  </button>
+                )}
+              </div>
+
+              {isSubscribed && (
+                <button
+                  onClick={handleDisablePush}
+                  className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-sm font-medium rounded-xl transition-colors"
+                >
+                  Desativar push neste aparelho
+                </button>
               )}
             </div>
           </div>

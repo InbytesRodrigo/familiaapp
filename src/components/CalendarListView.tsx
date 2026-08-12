@@ -44,13 +44,27 @@ const CalendarListView = ({
       userId: String(formData.get('userId') ?? ''),
     };
 
+    const notifyParaId = String(formData.get('notifyParaId') ?? 'all');
+
     if (editingEvent) {
       setEvents((prev) => prev.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data } : ev)));
-      simulateNotifications('Compromisso Atualizado', `${currentUser.name} atualizou "${data.title}".`);
+      simulateNotifications(
+        'Compromisso Atualizado',
+        `${currentUser.name} atualizou "${data.title}".`,
+        notifyParaId,
+        'evento',
+        editingEvent.id,
+      );
     } else {
       const newEvent: FamilyEvent = { id: newId(), ...data, createdBy: currentUser.id };
       setEvents((prev) => [...prev, newEvent]);
-      simulateNotifications('Novo Compromisso', `${currentUser.name} marcou "${newEvent.title}".`);
+      simulateNotifications(
+        'Novo Compromisso',
+        `${currentUser.name} marcou "${newEvent.title}".`,
+        notifyParaId,
+        'evento',
+        newEvent.id,
+      );
     }
 
     setIsEventModalOpen(false);
@@ -61,7 +75,13 @@ const CalendarListView = ({
     if (!editingEvent) return;
     if (!window.confirm(`Excluir o compromisso "${editingEvent.title}"?`)) return;
     setEvents((prev) => prev.filter((ev) => ev.id !== editingEvent.id));
-    simulateNotifications('Compromisso Excluído', `"${editingEvent.title}" foi removido.`);
+    simulateNotifications(
+      'Compromisso Excluído',
+      `"${editingEvent.title}" foi removido.`,
+      'all',
+      'evento',
+      editingEvent.id,
+    );
     setIsEventModalOpen(false);
     setEditingEvent(null);
   };
@@ -276,6 +296,23 @@ const CalendarListView = ({
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+                Notificar <span className="text-zinc-600">(quem recebe o aviso)</span>
+              </label>
+              <select
+                name="notifyParaId"
+                defaultValue="all"
+                className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all appearance-none"
+              >
+                <option value="all">Toda a família</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    Apenas {u.name}
                   </option>
                 ))}
               </select>

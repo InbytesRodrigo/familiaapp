@@ -58,13 +58,16 @@ npm run typecheck
 
 ### Mercado
 - Adicionar itens com quantidade e preço estimado.
+- **Data opcional** por item (ex.: item que precisa para um dia específico) — aparece na lista e gera lembrete no dia.
 - Resumo de **"A Comprar"** e **"Gasto Realizado"** (itens marcados como comprados).
 - Histórico de compras com opção de reativar itens.
 
 ### Configurações
 - **Família**: adicionar/remover/editar membros com nome, papel, **cor de identificação personalizada** e **foto de perfil** (upload de imagem, com fallback para emoji). A cor e a foto são refletidas em todo o app na hora.
 - **Evolution API (WhatsApp)**: configure URL da API, instância, API Key e número de destino para enviar avisos reais.
-- **Push Notifications**: habilite alertas nativos, escolha o lembrete dos compromissos (15 min / 1 h / 1 dia antes) e teste a notificação. Lembretes agendados (Notification Triggers) disparam **mesmo com o app fechado** no Chrome (Android/desktop).
+- **Push Notifications**: habilite alertas nativos com um toque ("Ativar push neste aparelho") — o app assina no servidor e salva no banco; cada mudança na agenda/mercado notifica todos os aparelhos, mesmo com o app fechado ou com o PWA instalado.
+- **Métodos de lembrete (admin)**: em Configurações → Push, configure **quando e quantas vezes** avisar (15 min, 1 h, 2 h, 6 h, 1 dia, 2 dias antes… cada linha = um aviso). Vale para todos os compromissos e itens do mercado com data — o servidor (cron a cada minuto) dispara o push no horário certo em qualquer aparelho.
+- **Central de avisos**: o sino no topo mostra avisos da família com **lido/não lido** — a foto do remetente **pulsa** quando o aviso não foi lido, e dá para marcar como lida (aparece "Lida" para todos).
 
 > 💾 **Dados**: o app salva tudo no **Supabase** (tabelas `familia`, `compromissos`, `mercado` e `push_subscriptions`) — agenda, mercado e família ficam salvos e sincronizam entre dispositivos. Os dados de exemplo estão em `src/data/initialData.ts` e são semeados na primeira abertura.
 

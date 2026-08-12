@@ -7,6 +7,7 @@ import {
   List,
   Settings,
   ShoppingCart,
+  X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Avatar from './components/Avatar';
@@ -19,21 +20,31 @@ import SettingsView from './components/SettingsView';
 import ShoppingView from './components/ShoppingView';
 import UserSwitcherSheet from './components/UserSwitcherSheet';
 import { initialEvents, initialShoppingItems, initialUsers } from './data/initialData';
-import type { EvolutionConfig, FamilyEvent, ShoppingItem, Toast, ToastType, User } from './types';
-import { isImageAvatar } from './utils';
-import { getReminderOffset, scheduleEventReminders, setReminderOffset as persistReminderOffset } from './utils/push';
-import type { ReminderOffset } from './utils/push';
+import type { Aviso, EvolutionConfig, FamilyEvent, MetodoLembrete, ShoppingItem, Toast, ToastType, User } from './types';
+import { isImageAvatar, timeAgo } from './utils';
+import {
+  getMetodosLembrete as getMetodosLocal,
+  scheduleEventReminders,
+  setMetodosLembrete as persistMetodosLocal,
+} from './utils/push';
 import {
   deleteEvents,
   deleteUsers,
+  loadAvisos,
   loadFromSupabase,
+  loadMetodosLembrete,
+  markAllAvisosLidas,
+  markAvisoLida,
+  saveAviso,
+  saveMetodosLembrete,
   sendPushNotification,
   syncEvents,
   syncItems,
   syncUsers,
 } from './lib/db';
+import { newId } from './lib/db';
 import type { FamilyData } from './lib/db';
-import { isSupabaseConfigured } from './lib/supabase';
+import { getSupabase as getSupabaseClient, isSupabaseConfigured } from './lib/supabase';
 
 type Tab = 'calendar' | 'shopping' | 'settings';
 
@@ -107,17 +118,97 @@ const App = () => {
     itemsRef.current = shoppingItems;
   }, [shoppingItems]);
 
-  // Lembretes de compromissos (Notification Triggers): funcionam com o app fechado
-  const [reminderOffset, setReminderOffsetState] = useState<ReminderOffset>(getReminderOffset);
-  const setReminderOffset = (value: ReminderOffset) => {
-    persistReminderOffset(value);
-    setReminderOffsetState(value);
+  // Métodos de lembrete ("quantas vezes / quanto tempo antes"): salvos no
+  // navegador E no banco — o cron do servidor usa a mesma configuração.
+  const [metodosLembrete, setMetodosLembreteState] = useState<MetodoLembrete[]>(getMetodosLocal);
+  const setMetodosLembrete = (metodos: MetodoLembrete[]) => {
+    setMetodosLembreteState(metodos);
+    persistMetodosLocal(metodos);
+    void saveMetodosLembrete(metodos);
   };
 
-  // Reagenda os lembretes sempre que os eventos ou a preferência mudarem
+  // Avisos entre membros (lido/não lido) + central de avisos
+  const [avisos, setAvisos] = useState<Aviso[]>([]);
+  const [isAvisosOpen, setIsAvisosOpen] = useState(false);
+
+  const visibleAvisos = avisos.filter((a) => a.paraId === 'all' || a.paraId === currentUser.id);
+  const unreadCount = visibleAvisos.filter((a) => !a.lida).length;
+
+  const addAviso = async (
+    titulo: string,
+    mensagem: string,
+    tipo: Aviso['tipo'],
+    paraId = 'all',
+    refId?: string,
+  ): Promise<void> => {
+    const aviso: Aviso = {
+      id: newId(),
+      titulo,
+      mensagem,
+      deId: currentUser.id,
+      paraId,
+      tipo,
+      refId,
+      lida: false,
+      criadoEm: new Date().toISOString(),
+    };
+    setAvisos((prev) => [aviso, ...prev]);
+    await saveAviso(aviso);
+  };
+
+  const marcarAvisoLida = (id: string) => {
+    setAvisos((prev) => prev.map((a) => (a.id === id ? { ...a, lida: true } : a)));
+    void markAvisoLida(id);
+  };
+
+  const marcarTodosLidos = () => {
+    setAvisos((prev) => prev.map((a) => ({ ...a, lida: true })));
+    void markAllAvisosLidas();
+  };
+
+  // Reagenda os lembretes sempre que os eventos, o mercado ou os métodos mudarem
   useEffect(() => {
-    scheduleEventReminders(events);
-  }, [events, reminderOffset]);
+    void scheduleEventReminders(events, shoppingItems);
+  }, [events, shoppingItems, metodosLembrete]);
+
+  // Carrega avisos + configuração de lembretes do banco (outros aparelhos)
+  useEffect(() => {
+    let alive = true;
+    const boot = async () => {
+      const [dbAvisos, dbMetodos] = await Promise.all([loadAvisos(), loadMetodosLembrete()]);
+      if (!alive) return;
+      if (dbAvisos.length > 0) setAvisos(dbAvisos);
+      if (dbMetodos.length > 0 && !localStorage.getItem('familiapp:metodos-lembrete')) {
+        setMetodosLembreteState(dbMetodos);
+        persistMetodosLocal(dbMetodos);
+      }
+    };
+    void boot();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Entrega instantânea de avisos entre aparelhos (Supabase Realtime)
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const channel = supabase
+      .channel('avisos-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'avisos' },
+        (payload) => {
+          const novo = payload.new as Aviso;
+          if (!novo?.id) return;
+          setAvisos((prev) => (prev.some((a) => a.id === novo.id) ? prev : [novo, ...prev]));
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
 
   // ——— Supabase: conexão, carga e sincronização ———
   // Estado da conexão com o banco (mostra aviso claro se algo não estiver salvando)
@@ -235,8 +326,17 @@ const App = () => {
     }, 5000);
   };
 
-  const simulatePushAndWhatsapp = (action: string, details: string) => {
+  const simulatePushAndWhatsapp = (
+    action: string,
+    details: string,
+    paraId = 'all',
+    tipo: Aviso['tipo'] = 'aviso',
+    refId?: string,
+  ) => {
     showNotification('Aviso Processado', `"${action}" foi registrado.`, 'success');
+
+    // Aviso persistente (lido/não lido, com foto do remetente)
+    void addAviso(action, details, tipo, paraId, refId);
 
     // Web Push real: avisa todos os aparelhos da família, mesmo com o app fechado
     // ou instalado como PWA (a tag igual evita notificação duplicada neste aparelho).
@@ -294,17 +394,32 @@ const App = () => {
       {/* Header mobile */}
       <div className="md:hidden flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 bg-[#121214] border-b border-zinc-800 shrink-0 z-20 relative">
         <Logo size="sm" variant={logoVariant} />
-        {/* Toque no avatar para trocar de usuário */}
-        <button
-          onClick={() => setIsUserSheetOpen(true)}
-          className="rounded-full ring-2 ring-zinc-700 active:ring-pink-500 transition-all"
-          aria-label="Trocar de usuário"
-        >
-          <Avatar
-            user={currentUser}
-            className="w-9 h-9 rounded-full text-lg shadow-inner border border-zinc-700/50"
-          />
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Sino de avisos com badge de não lidos */}
+          <button
+            onClick={() => setIsAvisosOpen(true)}
+            className="relative p-2 text-zinc-300 hover:text-white transition-colors"
+            aria-label="Avisos"
+          >
+            <Bell className="w-6 h-6" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-pink-500 text-white text-[10px] font-bold flex items-center justify-center aviso-badge-pop">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+          {/* Toque no avatar para trocar de usuário */}
+          <button
+            onClick={() => setIsUserSheetOpen(true)}
+            className="rounded-full ring-2 ring-zinc-700 active:ring-pink-500 transition-all"
+            aria-label="Trocar de usuário"
+          >
+            <Avatar
+              user={currentUser}
+              className="w-9 h-9 rounded-full text-lg shadow-inner border border-zinc-700/50"
+            />
+          </button>
+        </div>
       </div>
 
       {/* Sidebar (desktop) */}
@@ -330,6 +445,18 @@ const App = () => {
         </div>
 
         <div className="p-4 border-t border-zinc-800 shrink-0 bg-[#121214]">
+          <button
+            onClick={() => setIsAvisosOpen(true)}
+            className="w-full flex items-center gap-3 p-3 rounded-xl text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200 transition-all font-medium mb-2"
+          >
+            <Bell className="w-5 h-5" />
+            <span className="flex-1 text-left">Avisos</span>
+            {unreadCount > 0 && (
+              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-pink-500 text-white text-[10px] font-bold flex items-center justify-center aviso-badge-pop">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 px-2">
             Logado como:
           </div>
@@ -434,8 +561,8 @@ const App = () => {
             evolutionConfig={evolutionConfig}
             setEvolutionConfig={setEvolutionConfig}
             setPushGranted={setPushGranted}
-            reminderOffset={reminderOffset}
-            setReminderOffset={setReminderOffset}
+            metodosLembrete={metodosLembrete}
+            setMetodosLembrete={setMetodosLembrete}
             showNotification={showNotification}
             logoVariant={logoVariant}
             setLogoVariant={setLogoVariant}
@@ -478,6 +605,100 @@ const App = () => {
           }}
           onClose={() => setIsUserSheetOpen(false)}
         />
+      )}
+
+      {/* Central de avisos (lido/não lido, com foto do remetente) */}
+      {isAvisosOpen && (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-in fade-in"
+            onClick={() => setIsAvisosOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 md:inset-auto md:top-20 md:right-4 md:w-96 md:max-h-[70vh] bg-[#121214] border-t md:border border-zinc-800 md:rounded-3xl rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom-5 md:slide-in-from-top-5 duration-200 flex flex-col">
+            <div className="flex items-center justify-between gap-2 p-4 border-b border-zinc-800 shrink-0">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 min-w-0">
+                <Bell className="w-5 h-5 text-pink-500 shrink-0" />
+                <span className="truncate">Avisos</span>
+                {unreadCount > 0 && (
+                  <span className="text-xs bg-pink-500/20 text-pink-400 px-2 py-0.5 rounded-full font-bold shrink-0">
+                    {unreadCount} não lidos
+                  </span>
+                )}
+              </h3>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={marcarTodosLidos}
+                  className="text-xs text-zinc-400 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
+                >
+                  Marcar todos
+                </button>
+                <button
+                  onClick={() => setIsAvisosOpen(false)}
+                  className="p-2 bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-full transition-colors"
+                  aria-label="Fechar avisos"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="overflow-y-auto custom-scrollbar flex-1 max-h-[62dvh] md:max-h-[55vh]">
+              {visibleAvisos.length === 0 ? (
+                <div className="text-center text-zinc-500 text-sm py-12 px-4">
+                  Nenhum aviso ainda. Quando alguém marcar um compromisso ou avisar a família, aparece aqui.
+                </div>
+              ) : (
+                <div className="divide-y divide-zinc-800/70">
+                  {visibleAvisos.map((a) => {
+                    const sender = users.find((u) => u.id === a.deId);
+                    return (
+                      <div
+                        key={a.id}
+                        className={`flex items-start gap-3 p-4 ${!a.lida ? 'bg-pink-500/[0.04]' : ''}`}
+                      >
+                        <Avatar
+                          user={sender ?? currentUser}
+                          className={`w-10 h-10 rounded-full text-lg shrink-0 ${!a.lida ? 'aviso-avatar-unread' : ''}`}
+                          style={
+                            sender
+                              ? { boxShadow: `0 0 0 2px ${sender.color}` }
+                              : undefined
+                          }
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-bold text-white truncate">{a.titulo}</p>
+                            <span className="text-[10px] text-zinc-500 shrink-0">{timeAgo(a.criadoEm)}</span>
+                          </div>
+                          <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">{a.mensagem}</p>
+                          <div className="flex items-center gap-3 mt-2 flex-wrap">
+                            <span
+                              className="text-[10px] font-bold uppercase tracking-wider"
+                              style={{ color: sender?.color ?? '#a855f7' }}
+                            >
+                              {sender?.name ?? 'Família'}
+                            </span>
+                            {a.lida ? (
+                              <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+                                <Check className="w-3 h-3" /> Lida
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => marcarAvisoLida(a.id)}
+                                className="text-[10px] text-pink-400 font-semibold hover:text-pink-300 flex items-center gap-1"
+                              >
+                                <Check className="w-3 h-3" /> Marcar como lida
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toaster de notificações */}
