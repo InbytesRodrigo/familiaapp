@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import Modal from './Modal';
 import Avatar from './Avatar';
 import { isToday } from '../utils';
+import { newId } from '../lib/db';
 import type { FamilyEvent, Notify, User } from '../types';
 
 interface CalendarListViewProps {
@@ -35,7 +36,7 @@ const CalendarListView = ({
     );
 
     const newEvent: FamilyEvent = {
-      id: Date.now().toString(),
+      id: newId(),
       title: String(formData.get('title') ?? ''),
       date: eventDate,
       time: String(formData.get('time') ?? ''),

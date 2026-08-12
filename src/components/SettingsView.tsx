@@ -5,6 +5,7 @@ import Avatar from './Avatar';
 import Modal from './Modal';
 import type { EvolutionConfig, ToastType, User } from '../types';
 import { isImageAvatar } from '../utils';
+import { newId } from '../lib/db';
 import {
   getStoredSubscription,
   getVapidKey,
@@ -115,7 +116,7 @@ const SettingsView = ({
       showNotification('Sucesso', `Perfil de ${name} atualizado!`, 'success');
     } else {
       const newUser: User = {
-        id: Date.now().toString(),
+        id: newId(),
         name,
         role,
         color,

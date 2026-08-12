@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import Modal from './Modal';
 import Avatar from './Avatar';
 import { capitalize, isToday } from '../utils';
+import { newId } from '../lib/db';
 import type { FamilyEvent, Notify, User } from '../types';
 
 interface CalendarGridViewProps {
@@ -108,7 +109,7 @@ const CalendarGridView = ({
     );
 
     const newEvent: FamilyEvent = {
-      id: Date.now().toString(),
+      id: newId(),
       title: String(formData.get('title') ?? ''),
       date: eventDate,
       time: String(formData.get('time') ?? ''),

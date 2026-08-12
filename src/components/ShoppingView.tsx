@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Archive, Check, DollarSign, Plus, ShoppingCart } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
+import { newId } from '../lib/db';
 import type { Notify, ShoppingItem, User } from '../types';
 
 interface ShoppingViewProps {
@@ -60,7 +61,7 @@ const ShoppingView = ({
       );
     } else {
       const newItem: ShoppingItem = {
-        id: Date.now().toString(),
+        id: newId(),
         name: newItemName.trim(),
         quantity: newItemQuantity,
         price: parseFloat(newItemPrice) || 0,

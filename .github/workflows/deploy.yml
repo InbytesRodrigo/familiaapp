@@ -32,6 +32,9 @@ jobs:
 
       - name: Build (base da subpasta do Pages)
         run: npm run build -- --base=/familiaapp/
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Publicar artefato
         uses: actions/upload-pages-artifact@v3

@@ -22,6 +22,7 @@ import type { EvolutionConfig, FamilyEvent, ShoppingItem, Toast, ToastType, User
 import { isImageAvatar } from './utils';
 import { getReminderOffset, scheduleEventReminders, setReminderOffset as persistReminderOffset } from './utils/push';
 import type { ReminderOffset } from './utils/push';
+import { deleteUsers, loadFromSupabase, syncEvents, syncItems, syncUsers } from './lib/db';
 
 type Tab = 'calendar' | 'shopping' | 'settings';
 
@@ -82,6 +83,54 @@ const App = () => {
   useEffect(() => {
     scheduleEventReminders(events);
   }, [events, reminderOffset]);
+
+  // Supabase: carrega os dados salvos e sincroniza as mudanças
+  const [supabaseReady, setSupabaseReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const data = await loadFromSupabase();
+      if (!alive || !data) return;
+      setUsers(data.users);
+      setEvents(data.events);
+      setShoppingItems(data.items);
+      setCurrentUserId((cur) => (data.users.some((u) => u.id === cur) ? cur : data.users[0]?.id ?? cur));
+      setSupabaseReady(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Setters que atualizam o estado e gravam no Supabase
+  const setEventsSynced: React.Dispatch<React.SetStateAction<FamilyEvent[]>> = (value) => {
+    setEvents((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      if (supabaseReady) syncEvents(next);
+      return next;
+    });
+  };
+
+  const setUsersSynced: React.Dispatch<React.SetStateAction<User[]>> = (value) => {
+    setUsers((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      if (supabaseReady) {
+        const removed = prev.filter((u) => !next.some((n) => n.id === u.id)).map((u) => u.id);
+        syncUsers(next);
+        deleteUsers(removed);
+      }
+      return next;
+    });
+  };
+
+  const setShoppingItemsSynced: React.Dispatch<React.SetStateAction<ShoppingItem[]>> = (value) => {
+    setShoppingItems((prev) => {
+      const next = typeof value === 'function' ? value(prev) : value;
+      if (supabaseReady) syncItems(next);
+      return next;
+    });
+  };
 
   const showNotification = (title: string, message: string, type: ToastType = 'info') => {
     const id = Date.now();
@@ -232,7 +281,7 @@ const App = () => {
         {activeTab === 'calendar' && calendarView === 'list' && (
           <CalendarListView
             events={events}
-            setEvents={setEvents}
+            setEvents={setEventsSynced}
             users={users}
             currentUser={currentUser}
             simulateNotifications={simulatePushAndWhatsapp}
@@ -241,7 +290,7 @@ const App = () => {
         {activeTab === 'calendar' && calendarView === 'grid' && (
           <CalendarGridView
             events={events}
-            setEvents={setEvents}
+            setEvents={setEventsSynced}
             users={users}
             currentUser={currentUser}
             simulateNotifications={simulatePushAndWhatsapp}
@@ -250,7 +299,7 @@ const App = () => {
         {activeTab === 'shopping' && (
           <ShoppingView
             items={shoppingItems}
-            setItems={setShoppingItems}
+            setItems={setShoppingItemsSynced}
             currentUser={currentUser}
             users={users}
             simulateNotifications={simulatePushAndWhatsapp}
@@ -259,7 +308,7 @@ const App = () => {
         {activeTab === 'settings' && (
           <SettingsView
             users={users}
-            setUsers={setUsers}
+            setUsers={setUsersSynced}
             evolutionConfig={evolutionConfig}
             setEvolutionConfig={setEvolutionConfig}
             pushGranted={pushGranted}
