@@ -1,9 +1,13 @@
 # FamíliaApp — configuração de build para o Netlify
-# O app funciona em qualquer hospedagem: para salvar os dados, ou
-# 1) configure as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
-#    em Site settings → Environment variables (recomendado), ou
-# 2) conecte o banco em Configurações → Banco de Dados dentro do próprio app.
+# As credenciais abaixo são a chave ANON (pública por design — já vai embutida
+# no app em qualquer hospedagem) e a URL do projeto. Com elas, o build do
+# Netlify já sai conectado ao banco de dados, sem configurar nada por fora.
+# A segurança dos dados é garantida pelas políticas (RLS) do Supabase.
 
 [build]
   command = "npm run build"
   publish = "dist"
+
+[build.environment]
+  VITE_SUPABASE_URL = "https://ooaiukewoejaipydmkge.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vYWl1a2V3b2VqYWlweWRta2dlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMzU0OTIsImV4cCI6MjEwMTYxMTQ5Mn0.rNQantXXcOSvqLGqCAlAQ5MeBzBX_EopFv30vfNuYto"
