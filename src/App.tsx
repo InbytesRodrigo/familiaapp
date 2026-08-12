@@ -103,6 +103,28 @@ const App = () => {
     };
   }, []);
 
+  // Re-sincroniza com o Supabase ao voltar para a aba: mudou em um dispositivo,
+  // aparece no outro (evita a sensação de "não salvou").
+  useEffect(() => {
+    let alive = true;
+    const refresh = async () => {
+      if (document.visibilityState === 'hidden') return;
+      const data = await loadFromSupabase();
+      if (!alive || !data) return;
+      setUsers(data.users);
+      setEvents(data.events);
+      setShoppingItems(data.items);
+      setCurrentUserId((cur) => (data.users.some((u) => u.id === cur) ? cur : data.users[0]?.id ?? cur));
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
+
   // Setters que atualizam o estado e gravam no Supabase
   const setEventsSynced: React.Dispatch<React.SetStateAction<FamilyEvent[]>> = (value) => {
     setEvents((prev) => {

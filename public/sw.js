@@ -4,7 +4,8 @@
  * - Agenda lembretes de compromissos que disparam mesmo com o app fechado
  *   (Notification Triggers, Chrome/Android)
  */
-const CACHE_NAME = 'familiapp-v1';
+/* v2: navegação agora é network-first — instalados recebem as atualizações sem ficar presos no cache antigo */
+const CACHE_NAME = 'familiapp-v2';
 /* Caminhos relativos: o app pode rodar na raiz ou em subpasta (ex.: GitHub Pages) */
 const SHELL = ['./', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
 const ICON = './icons/icon-192.png';
@@ -39,6 +40,28 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || !request.url.startsWith(self.location.origin)) return;
 
+  // Páginas (navegação): SEMPRE tenta a rede primeiro, para o app instalado
+  // receber as versões novas (o cache antigo é o que causava dados perdidos).
+  // Offline: cai para o cache salvo.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        try {
+          const response = await fetch(request);
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        } catch {
+          return (await caches.match(request)) || (await caches.match('./'));
+        }
+      })(),
+    );
+    return;
+  }
+
+  // Assets (JS/CSS/imagens, com hash no nome): cache com atualização em segundo plano
   event.respondWith(
     (async () => {
       const cached = await caches.match(request);
