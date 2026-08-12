@@ -11,6 +11,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import Avatar from './components/Avatar';
 import Logo from './components/Logo';
+import type { LogoVariant } from './components/Logo';
 import SplashScreen from './components/SplashScreen';
 import CalendarGridView from './components/CalendarGridView';
 import CalendarListView from './components/CalendarListView';
@@ -68,6 +69,16 @@ const App = () => {
   const [pushGranted, setPushGranted] = useState<boolean>(
     typeof Notification !== 'undefined' ? Notification.permission === 'granted' : false,
   );
+
+  // Modelo de logo escolhido (guardado no navegador)
+  const LOGO_KEY = 'familiaapp:logo';
+  const [logoVariant, setLogoVariantState] = useState<LogoVariant>(
+    () => (localStorage.getItem(LOGO_KEY) as LogoVariant) || 'f',
+  );
+  const setLogoVariant = (v: LogoVariant) => {
+    localStorage.setItem(LOGO_KEY, v);
+    setLogoVariantState(v);
+  };
 
   const [events, setEvents] = useState<FamilyEvent[]>(initialEvents);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(initialShoppingItems);
@@ -212,11 +223,11 @@ const App = () => {
   return (
     <div className="flex flex-col md:flex-row h-screen supports-[height:100dvh]:h-dvh bg-[#09090b] text-white font-sans overflow-hidden selection:bg-pink-500/30">
       {/* Efeito de abertura (splash) */}
-      {splashVisible && <SplashScreen fading={splashFading} onSkip={skipSplash} />}
+      {splashVisible && <SplashScreen fading={splashFading} onSkip={skipSplash} variant={logoVariant} />}
 
       {/* Header mobile */}
       <div className="md:hidden flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 bg-[#121214] border-b border-zinc-800 shrink-0 z-20 relative">
-        <Logo size="sm" />
+        <Logo size="sm" variant={logoVariant} />
         {/* Toque no avatar para trocar de usuário */}
         <button
           onClick={() => setIsUserSheetOpen(true)}
@@ -233,7 +244,7 @@ const App = () => {
       {/* Sidebar (desktop) */}
       <div className="hidden md:flex flex-col w-64 bg-[#121214] border-r border-zinc-800 shrink-0">
         <div className="p-6 items-center gap-3 shrink-0 flex">
-          <Logo size="md" />
+          <Logo size="md" variant={logoVariant} />
         </div>
 
         <div className="flex-1 py-4 px-4 space-y-2 overflow-y-auto custom-scrollbar">
@@ -342,6 +353,8 @@ const App = () => {
             reminderOffset={reminderOffset}
             setReminderOffset={setReminderOffset}
             showNotification={showNotification}
+            logoVariant={logoVariant}
+            setLogoVariant={setLogoVariant}
           />
         )}
       </div>

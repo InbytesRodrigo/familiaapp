@@ -1,12 +1,14 @@
 import Logo from './Logo';
+import type { LogoVariant } from './Logo';
 
 interface SplashScreenProps {
   fading: boolean;
   onSkip: () => void;
+  variant?: LogoVariant;
 }
 
 /** Efeito de abertura estilo app nativo: logo animada em destaque. */
-const SplashScreen = ({ fading, onSkip }: SplashScreenProps) => (
+const SplashScreen = ({ fading, onSkip, variant = 'f' }: SplashScreenProps) => (
   <div
     onClick={onSkip}
     className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#09090b] transition-opacity duration-500 ${
@@ -15,7 +17,7 @@ const SplashScreen = ({ fading, onSkip }: SplashScreenProps) => (
   >
     <div className="relative flex items-center justify-center">
       <span className="logo-pulse-ring absolute -inset-5 rounded-full pointer-events-none" />
-      <Logo size="lg" showName={false} className="logo-pop" />
+      <Logo size="lg" showName={false} className="logo-pop" variant={variant} />
     </div>
     <div className="mt-6 flex flex-col items-center">
       <span className="text-3xl font-bold tracking-tight animate-in fade-in duration-500 delay-200">

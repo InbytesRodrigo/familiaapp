@@ -402,8 +402,29 @@ const CalendarGridView = ({
             setEditingEvent(null);
           }}
           title={editingEvent ? 'Editar Compromisso' : 'Novo Compromisso'}
+          footer={
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEventModalOpen(false);
+                  setEditingEvent(null);
+                }}
+                className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form="grid-event-form"
+                className="flex-1 px-4 py-3 bg-pink-500 text-white font-medium rounded-xl hover:bg-pink-400 transition-colors"
+              >
+                {editingEvent ? 'Salvar' : 'Criar'}
+              </button>
+            </div>
+          }
         >
-          <form onSubmit={handleSubmitEvent} className="space-y-5">
+          <form id="grid-event-form" onSubmit={handleSubmitEvent} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1.5">Título</label>
               <input
@@ -470,24 +491,6 @@ const CalendarGridView = ({
                 <Trash2 className="w-4 h-4" /> Excluir Compromisso
               </button>
             )}
-            <div className="pt-4 flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEventModalOpen(false);
-                  setEditingEvent(null);
-                }}
-                className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 px-4 py-3 bg-pink-500 text-white font-medium rounded-xl hover:bg-pink-400 transition-colors"
-              >
-                {editingEvent ? 'Salvar' : 'Criar'}
-              </button>
-            </div>
           </form>
         </Modal>
       )}

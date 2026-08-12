@@ -5,9 +5,11 @@ interface ModalProps {
   children: ReactNode;
   onClose: () => void;
   title: string;
+  /** Rodapé fixo (ex.: botões Salvar/Cancelar) — fica sempre visível, sem rolar. */
+  footer?: ReactNode;
 }
 
-const Modal = ({ children, onClose, title }: ModalProps) => (
+const Modal = ({ children, onClose, title, footer }: ModalProps) => (
   <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex justify-center items-end md:items-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
     <div className="bg-[#121214] border border-zinc-800 w-full max-w-md rounded-3xl shadow-2xl flex flex-col max-h-[calc(100dvh_-_3rem)] md:max-h-[90vh] animate-in fade-in zoom-in duration-200">
       <div className="flex justify-between items-center p-5 border-b border-zinc-800 shrink-0">
@@ -20,6 +22,11 @@ const Modal = ({ children, onClose, title }: ModalProps) => (
         </button>
       </div>
       <div className="p-5 overflow-y-auto custom-scrollbar flex-1">{children}</div>
+      {footer && (
+        <div className="p-4 pt-3 border-t border-zinc-800 shrink-0 bg-[#121214] rounded-b-3xl pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {footer}
+        </div>
+      )}
     </div>
   </div>
 );

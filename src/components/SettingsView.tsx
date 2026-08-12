@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Camera, MessageSquare, Pencil, Plus, Smartphone, X } from 'lucide-react';
 import type { ChangeEvent, FormEvent } from 'react';
 import Avatar from './Avatar';
+import Logo from './Logo';
+import type { LogoVariant } from './Logo';
 import Modal from './Modal';
 import type { EvolutionConfig, ToastType, User } from '../types';
 import { isImageAvatar } from '../utils';
@@ -29,6 +31,8 @@ interface SettingsViewProps {
   reminderOffset: ReminderOffset;
   setReminderOffset: (value: ReminderOffset) => void;
   showNotification: (title: string, message: string, type?: ToastType) => void;
+  logoVariant: LogoVariant;
+  setLogoVariant: (value: LogoVariant) => void;
 }
 
 const MAX_PHOTO_SIZE = 2 * 1024 * 1024; // 2MB
@@ -43,6 +47,8 @@ const SettingsView = ({
   reminderOffset,
   setReminderOffset,
   showNotification,
+  logoVariant,
+  setLogoVariant,
 }: SettingsViewProps) => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -201,6 +207,46 @@ const SettingsView = ({
   return (
     <div className="flex-1 bg-[#09090b] overflow-y-auto custom-scrollbar">
       <div className="max-w-4xl mx-auto space-y-8 p-4 md:p-8 pb-32">
+        {/* Seção: Logo do app */}
+        <div>
+          <h2 className="text-xl font-bold text-white mb-1">Logo do App</h2>
+          <p className="text-sm text-zinc-500 mb-4">
+            Escolha o modelo que prefere — vale na tela de abertura, no topo e na barra lateral.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              onClick={() => setLogoVariant('f')}
+              className={`p-5 rounded-3xl border-2 bg-[#121214] flex flex-col items-start gap-3 text-left transition-all ${
+                logoVariant === 'f' ? 'border-pink-500' : 'border-zinc-800 hover:border-zinc-600'
+              }`}
+            >
+              <Logo size="md" variant="f" />
+              <span className="text-sm font-bold text-white">Letra F — gradiente animado</span>
+              <span className="text-xs text-zinc-500 leading-relaxed">
+                Estilo Instagram, com brilho varrendo o ícone.
+              </span>
+              {logoVariant === 'f' && (
+                <span className="text-[10px] text-pink-500 font-bold uppercase tracking-wider">Em uso</span>
+              )}
+            </button>
+            <button
+              onClick={() => setLogoVariant('casa')}
+              className={`p-5 rounded-3xl border-2 bg-[#121214] flex flex-col items-start gap-3 text-left transition-all ${
+                logoVariant === 'casa' ? 'border-pink-500' : 'border-zinc-800 hover:border-zinc-600'
+              }`}
+            >
+              <Logo size="md" variant="casa" />
+              <span className="text-sm font-bold text-white">Casa & Coração — novo</span>
+              <span className="text-xs text-zinc-500 leading-relaxed">
+                Símbolo de família em anel com gradiente, para comparar.
+              </span>
+              {logoVariant === 'casa' && (
+                <span className="text-[10px] text-pink-500 font-bold uppercase tracking-wider">Em uso</span>
+              )}
+            </button>
+          </div>
+        </div>
+
         {/* Seção: Família */}
         <div>
           <div className="flex justify-between items-center mb-4">
@@ -397,8 +443,29 @@ const SettingsView = ({
 
         {/* Modal: Configurar Evolution API */}
         {isEvolutionOpen && (
-          <Modal onClose={() => setIsEvolutionOpen(false)} title="Configurar Evolution API">
-            <form onSubmit={handleSaveEvolution} className="space-y-4">
+          <Modal
+            onClose={() => setIsEvolutionOpen(false)}
+            title="Configurar Evolution API"
+            footer={
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEvolutionOpen(false)}
+                  className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  form="evolution-form"
+                  className="flex-1 px-4 py-3 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-500 transition-colors"
+                >
+                  Salvar
+                </button>
+              </div>
+            }
+          >
+            <form id="evolution-form" onSubmit={handleSaveEvolution} className="space-y-4">
               <div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 mb-2">
                 <p className="text-xs text-emerald-400 leading-relaxed">
                   Insira os dados da sua API Evolution para enviar alertas reais de agenda e mercado via
@@ -453,21 +520,6 @@ const SettingsView = ({
                 </p>
               </div>
 
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsEvolutionOpen(false)}
-                  className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-3 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-500 transition-colors"
-                >
-                  Salvar
-                </button>
-              </div>
             </form>
           </Modal>
         )}
@@ -477,8 +529,26 @@ const SettingsView = ({
           <Modal
             onClose={closeUserModal}
             title={editingUser ? 'Editar Membro' : 'Novo Membro Familiar'}
+            footer={
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeUserModal}
+                  className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  form="member-form"
+                  className="flex-1 px-4 py-3 bg-pink-500 text-white font-medium rounded-xl hover:bg-pink-400 transition-colors"
+                >
+                  {editingUser ? 'Salvar' : 'Cadastrar'}
+                </button>
+              </div>
+            }
           >
-            <form onSubmit={handleSaveUser} className="space-y-4">
+            <form id="member-form" onSubmit={handleSaveUser} className="space-y-4">
               <div className="flex gap-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-zinc-400 mb-1.5">Nome</label>
@@ -574,21 +644,6 @@ const SettingsView = ({
                 </p>
               </div>
 
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={closeUserModal}
-                  className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-3 bg-pink-500 text-white font-medium rounded-xl hover:bg-pink-400 transition-colors"
-                >
-                  {editingUser ? 'Salvar' : 'Cadastrar'}
-                </button>
-              </div>
             </form>
           </Modal>
         )}

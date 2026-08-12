@@ -21,6 +21,11 @@
   background: #3f3f46;
 }
 
+/* Logo modelo 2: anel com gradiente (casa & coração) */
+.logo-ring-gradient {
+  background: conic-gradient(from 210deg, #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75);
+}
+
 /* Logo animada estilo Instagram */
 .logo-gradient {
   background-image: linear-gradient(

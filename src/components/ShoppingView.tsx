@@ -200,8 +200,29 @@ const ShoppingView = ({
 
       {/* Modal de novo item */}
       {isFormOpen && (
-        <Modal onClose={() => setIsFormOpen(false)} title="Novo Item">
-          <form onSubmit={handleAddItem} className="space-y-5">
+        <Modal
+          onClose={() => setIsFormOpen(false)}
+          title="Novo Item"
+          footer={
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(false)}
+                className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                form="shopping-item-form"
+                className="flex-1 px-4 py-3 bg-pink-500 text-white font-medium rounded-xl hover:bg-pink-400 transition-colors"
+              >
+                Adicionar
+              </button>
+            </div>
+          }
+        >
+          <form id="shopping-item-form" onSubmit={handleAddItem} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1.5">Produto</label>
               <input
@@ -238,21 +259,6 @@ const ShoppingView = ({
                   className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                 />
               </div>
-            </div>
-            <div className="pt-4 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setIsFormOpen(false)}
-                className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 px-4 py-3 bg-pink-500 text-white font-medium rounded-xl hover:bg-pink-400 transition-colors"
-              >
-                Adicionar
-              </button>
             </div>
           </form>
         </Modal>
