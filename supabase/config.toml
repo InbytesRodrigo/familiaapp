@@ -1,0 +1,7 @@
+# FamíliaApp — configuração do Supabase CLI (edge functions, migrations)
+project_id = "ooaiukewoejaipydmkge"
+
+[functions.send-push]
+# Exige um JWT válido (o app envia a chave anon automaticamente) — impede
+# que qualquer pessoa sem a chave do projeto dispare pushes.
+verify_jwt = true

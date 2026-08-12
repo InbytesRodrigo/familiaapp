@@ -13,15 +13,16 @@ import {
   getConnectionConfig,
   setSupabaseConnection,
 } from '../lib/supabase';
+import { deletePushSubscription, getVapidPublicKey, savePushSubscription } from '../lib/db';
 import {
+  clearStoredSubscription,
+  getServiceWorker,
   getStoredSubscription,
-  getVapidKey,
   isScheduledSupported,
   REMINDER_OPTIONS,
   requestPushPermission,
   sendScheduledTest,
   sendTestNotification,
-  setVapidKey,
   subscribeToPush,
 } from '../utils/push';
 import type { ReminderOffset } from '../utils/push';
@@ -31,7 +32,6 @@ interface SettingsViewProps {
   setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   evolutionConfig: EvolutionConfig;
   setEvolutionConfig: React.Dispatch<React.SetStateAction<EvolutionConfig>>;
-  pushGranted: boolean;
   setPushGranted: React.Dispatch<React.SetStateAction<boolean>>;
   reminderOffset: ReminderOffset;
   setReminderOffset: (value: ReminderOffset) => void;
@@ -49,7 +49,6 @@ const SettingsView = ({
   setUsers,
   evolutionConfig,
   setEvolutionConfig,
-  pushGranted,
   setPushGranted,
   reminderOffset,
   setReminderOffset,
@@ -63,8 +62,8 @@ const SettingsView = ({
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [avatarPreview, setAvatarPreview] = useState('');
   const [isEvolutionOpen, setIsEvolutionOpen] = useState(false);
-  const [vapidKeyInput, setVapidKeyInput] = useState(getVapidKey);
   const [isSubscribed, setIsSubscribed] = useState(() => !!getStoredSubscription());
+  const [pushBusy, setPushBusy] = useState(false);
   const [scheduledSupported, setScheduledSupported] = useState<boolean | null>(null);
 
   // Conexão com o banco (Supabase) configurável em tempo de execução
@@ -174,18 +173,70 @@ const SettingsView = ({
   };
 
   const handleEnablePush = async () => {
-    if (!('Notification' in window)) {
-      showNotification('Erro', 'Seu navegador não suporta notificações Push.', 'error');
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      showNotification(
+        'Erro',
+        'Seu navegador não suporta push. Use o Chrome/Edge no celular ou no computador, ou instale o app na tela inicial.',
+        'error',
+      );
       return;
     }
-    const granted = await requestPushPermission();
-    setPushGranted(granted);
-    if (granted) {
-      new Notification('Tudo Certo!', { body: 'Notificações push ativadas com sucesso.' });
-      showNotification('Sucesso', 'Push Notifications ativadas!', 'success');
-    } else {
-      showNotification('Aviso', 'Permissão para notificações negada.', 'error');
+    setPushBusy(true);
+    try {
+      const granted = await requestPushPermission();
+      setPushGranted(granted);
+      if (!granted) {
+        showNotification('Aviso', 'Permissão para notificações negada.', 'error');
+        return;
+      }
+
+      // Busca a chave pública VAPID do servidor de push (Edge Function)
+      const vapidKey = await getVapidPublicKey();
+      if (!vapidKey) {
+        showNotification(
+          'Erro',
+          'Não foi possível buscar a chave do servidor de push. Tente de novo em instantes.',
+          'error',
+        );
+        return;
+      }
+
+      // Cria a assinatura deste aparelho e salva no banco
+      const sub = await subscribeToPush(vapidKey);
+      if (!sub) {
+        showNotification('Erro', 'Não foi possível criar a assinatura de push.', 'error');
+        return;
+      }
+
+      const saved = await savePushSubscription(sub);
+      setIsSubscribed(true);
+      showNotification(
+        saved ? 'Sucesso' : 'Aviso',
+        saved
+          ? 'Push ativado! Você receberá os avisos da família mesmo com o app fechado.'
+          : 'Assinatura criada neste aparelho, mas ainda não foi salva no banco.',
+        saved ? 'success' : 'error',
+      );
+    } finally {
+      setPushBusy(false);
     }
+  };
+
+  const handleDisablePush = async () => {
+    try {
+      const sw = await getServiceWorker();
+      const sub = sw ? await sw.pushManager.getSubscription() : null;
+      if (sub) {
+        await deletePushSubscription(sub.endpoint);
+        await sub.unsubscribe();
+      }
+    } catch {
+      /* segue mesmo se a desinscrição falhar */
+    }
+    clearStoredSubscription();
+    setIsSubscribed(false);
+    setPushGranted(false);
+    showNotification('Push desativado', 'Este aparelho não receberá mais notificações.', 'info');
   };
 
   const handleTestNow = async () => {
@@ -207,19 +258,6 @@ const SettingsView = ({
         ? 'Uma notificação será mostrada em 15 segundos — feche o app e aguarde.'
         : 'O service worker ainda não está pronto. Recarregue a página e tente de novo.',
       ok ? 'success' : 'error',
-    );
-  };
-
-  const handleSubscribe = async () => {
-    const sub = await subscribeToPush(vapidKeyInput);
-    setVapidKey(vapidKeyInput);
-    setIsSubscribed(!!sub || !!getStoredSubscription());
-    showNotification(
-      sub ? 'Sucesso' : 'Erro',
-      sub
-        ? 'Assinatura de push criada! Agora um servidor pode enviar mensagens para o app.'
-        : 'Não foi possível assinar. Confira a chave VAPID e a permissão de notificação.',
-      sub ? 'success' : 'error',
     );
   };
 
@@ -444,25 +482,31 @@ const SettingsView = ({
                   </p>
                   <div
                     className={`mt-3 text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full inline-block font-bold border ${
-                      pushGranted
+                      isSubscribed
                         ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                         : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                     }`}
                   >
-                    {pushGranted ? 'Ativo' : 'Inativo'}
+                    {isSubscribed ? 'Ativo' : 'Inativo'}
                   </div>
                 </div>
               </div>
 
-              {!pushGranted ? (
+              {!isSubscribed ? (
                 <button
                   onClick={handleEnablePush}
-                  className="mt-2 w-full py-2.5 bg-blue-500 hover:bg-blue-400 text-white text-sm font-medium rounded-xl transition-colors"
+                  disabled={pushBusy}
+                  className="mt-2 w-full py-2.5 bg-blue-500 hover:bg-blue-400 disabled:opacity-60 text-white text-sm font-medium rounded-xl transition-colors"
                 >
-                  Habilitar Push
+                  {pushBusy ? 'Ativando...' : 'Ativar push neste aparelho'}
                 </button>
               ) : (
                 <div className="w-full space-y-4">
+                  <p className="text-[11px] text-emerald-400/90 flex items-center gap-1.5">
+                    <span aria-hidden>✓</span> Ativo neste aparelho — você recebe os avisos da família mesmo
+                    com o app fechado ou instalado como PWA.
+                  </p>
+
                   {/* Lembretes de compromissos */}
                   <div>
                     <label className="block text-xs font-medium text-zinc-400 mb-1.5">
@@ -481,8 +525,8 @@ const SettingsView = ({
                     </select>
                     {scheduledSupported === false ? (
                       <p className="text-[10px] text-amber-500/80 mt-1 leading-relaxed">
-                        Seu navegador não suporta lembretes com o app fechado. Use o Chrome no Android ou no
-                        computador, ou instale o app na tela inicial.
+                        Seu navegador não suporta lembretes com o app fechado. O push de servidor continua
+                        funcionando em qualquer aparelho.
                       </p>
                     ) : (
                       <p className="text-[10px] text-zinc-500 mt-1 leading-relaxed">
@@ -509,31 +553,12 @@ const SettingsView = ({
                     )}
                   </div>
 
-                  {/* Push real via servidor (avançado) */}
-                  <details className="group">
-                    <summary className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer font-medium">
-                      Push de servidor (avançado)
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      <input
-                        type="text"
-                        value={vapidKeyInput}
-                        onChange={(e) => setVapidKeyInput(e.target.value)}
-                        placeholder="Chave pública VAPID (base64url)"
-                        className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder-zinc-700 text-xs"
-                      />
-                      <button
-                        onClick={handleSubscribe}
-                        className="w-full py-2.5 bg-blue-500 hover:bg-blue-400 text-white text-sm font-medium rounded-xl transition-colors"
-                      >
-                        {isSubscribed ? 'Assinatura ativa ✓' : 'Assinar para push'}
-                      </button>
-                      <p className="text-[10px] text-zinc-500 leading-relaxed">
-                        Para receber mensagens enviadas por um servidor (mesmo dias depois), gere um par de
-                        chaves VAPID e configure um backend para enviar o push. O app já está pronto para receber.
-                      </p>
-                    </div>
-                  </details>
+                  <button
+                    onClick={handleDisablePush}
+                    className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-sm font-medium rounded-xl transition-colors"
+                  >
+                    Desativar push neste aparelho
+                  </button>
                 </div>
               )}
             </div>

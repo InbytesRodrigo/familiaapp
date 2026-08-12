@@ -23,7 +23,15 @@ import type { EvolutionConfig, FamilyEvent, ShoppingItem, Toast, ToastType, User
 import { isImageAvatar } from './utils';
 import { getReminderOffset, scheduleEventReminders, setReminderOffset as persistReminderOffset } from './utils/push';
 import type { ReminderOffset } from './utils/push';
-import { deleteEvents, deleteUsers, loadFromSupabase, syncEvents, syncItems, syncUsers } from './lib/db';
+import {
+  deleteEvents,
+  deleteUsers,
+  loadFromSupabase,
+  sendPushNotification,
+  syncEvents,
+  syncItems,
+  syncUsers,
+} from './lib/db';
 import type { FamilyData } from './lib/db';
 import { isSupabaseConfigured } from './lib/supabase';
 
@@ -230,9 +238,17 @@ const App = () => {
   const simulatePushAndWhatsapp = (action: string, details: string) => {
     showNotification('Aviso Processado', `"${action}" foi registrado.`, 'success');
 
+    // Web Push real: avisa todos os aparelhos da família, mesmo com o app fechado
+    // ou instalado como PWA (a tag igual evita notificação duplicada neste aparelho).
+    void sendPushNotification(`FamíliaApp: ${action}`, details, '/', 'familiapp-notify');
+
     if (pushGranted && typeof Notification !== 'undefined') {
       try {
-        new Notification(`FamíliaApp: ${action}`, { body: details, icon: currentUser.avatar });
+        new Notification(`FamíliaApp: ${action}`, {
+          body: details,
+          icon: currentUser.avatar,
+          tag: 'familiapp-notify',
+        });
       } catch (e) {
         console.error('Erro no Push Nativo:', e);
       }
@@ -417,7 +433,6 @@ const App = () => {
             setUsers={setUsersSynced}
             evolutionConfig={evolutionConfig}
             setEvolutionConfig={setEvolutionConfig}
-            pushGranted={pushGranted}
             setPushGranted={setPushGranted}
             reminderOffset={reminderOffset}
             setReminderOffset={setReminderOffset}

@@ -66,7 +66,7 @@ npm run typecheck
 - **Evolution API (WhatsApp)**: configure URL da API, instância, API Key e número de destino para enviar avisos reais.
 - **Push Notifications**: habilite alertas nativos, escolha o lembrete dos compromissos (15 min / 1 h / 1 dia antes) e teste a notificação. Lembretes agendados (Notification Triggers) disparam **mesmo com o app fechado** no Chrome (Android/desktop).
 
-> ⚠️ **Nota sobre dados**: atualmente os dados ficam em memória (React state) e são perdidos ao recarregar a página. Os dados de exemplo estão em `src/data/initialData.ts`.
+> 💾 **Dados**: o app salva tudo no **Supabase** (tabelas `familia`, `compromissos`, `mercado` e `push_subscriptions`) — agenda, mercado e família ficam salvos e sincronizam entre dispositivos. Os dados de exemplo estão em `src/data/initialData.ts` e são semeados na primeira abertura.
 
 ## 📱 PWA e notificações push
 
@@ -74,7 +74,8 @@ O app é um **PWA**: instale na tela inicial do celular (Android: menu do navega
 
 - **Service worker** (`public/sw.js`): registrado em `src/main.tsx`, cuida do cache offline, do clique em notificações e do recebimento de push.
 - **Lembretes agendados**: em Configurações → Push, escolha quando lembrar dos compromissos. Os lembretes são agendados no service worker e disparam mesmo com o app fechado (navegadores com suporte a Notification Triggers).
-- **Push de servidor (Web Push)**: em Configurações → Push → "Push de servidor (avançado)", informe a chave pública VAPID para assinar. O envio real das mensagens precisa de um backend que use a assinatura armazenada — o app já está pronto para recebê-las.
+- **Push de servidor (Web Push) — funciona com o app fechado e no PWA instalado**: ao tocar em "Ativar push neste aparelho" (Configurações → Push), o app pede permissão, busca a chave pública VAPID na Edge Function do Supabase, assina e salva a assinatura na tabela `push_subscriptions`. A partir daí, qualquer mudança na agenda/mercado envia uma notificação para **todos os aparelhos da família** (mesmo com o app fechado — Android/iOS instalado/desktop). O envio acontece pela Edge Function `supabase/functions/send-push` (Web Push com VAPID).
+- **Edge Function de push** (`supabase/functions/send-push`): `GET` devolve a chave pública VAPID; `POST` envia a mensagem para todas as assinaturas salvas e remove sozinha as assinaturas de aparelhos desinstalados. Secrets usados: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. As chaves são geradas com `node scripts/generate-vapid.mjs`.
 - **Ícones**: gere novamente com `node scripts/generate-icons.mjs` (PNGs sem dependências externas).
 
 ## 🔔 Integrações de avisos

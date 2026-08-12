@@ -164,6 +164,11 @@ export const getStoredSubscription = (): PushSubscription | null => {
   }
 };
 
+/** Remove a assinatura salva no navegador (ao desativar o push neste aparelho). */
+export const clearStoredSubscription = (): void => {
+  localStorage.removeItem(SUBSCRIPTION_KEY);
+};
+
 export const getVapidKey = (): string => localStorage.getItem(VAPID_KEY) ?? '';
 export const setVapidKey = (key: string): void => {
   localStorage.setItem(VAPID_KEY, key.trim());

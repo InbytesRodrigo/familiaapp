@@ -109,8 +109,8 @@ const CalendarListView = ({
         {sortedDates.map((group, index) => {
           const groupIsToday = isToday(group.date);
           const dayNumber = group.date.getDate();
-          const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(group.date);
-          const monthYear = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(group.date);
+          const dayName = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' }).format(group.date);
+          const monthYear = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(group.date);
 
           return (
             <div key={index} className="mb-10">
@@ -120,7 +120,7 @@ const CalendarListView = ({
                   <span className="text-4xl md:text-5xl font-bold tracking-tight">{dayNumber}</span>
                   {groupIsToday && (
                     <span className="text-pink-500 text-lg md:text-2xl tracking-widest font-semibold uppercase">
-                      Today
+                      Hoje
                     </span>
                   )}
                 </div>

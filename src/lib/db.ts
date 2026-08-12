@@ -234,3 +234,88 @@ export const syncItems = async (items: ShoppingItem[]): Promise<boolean> => {
     return false;
   }
 };
+
+// ——— Web Push (notificações que funcionam mesmo com o app fechado / PWA instalado) ———
+
+const VAPID_CACHE_KEY = 'familiapp:vapid-public';
+
+/**
+ * Chave pública VAPID do servidor de push (Edge Function).
+ * Vem da função e fica em cache no navegador para não buscar toda hora.
+ */
+export const getVapidPublicKey = async (): Promise<string | null> => {
+  const cached = localStorage.getItem(VAPID_CACHE_KEY);
+  if (cached) return cached;
+  const supabase = getSupabase();
+  if (!supabase) return null;
+  try {
+    // Importante: nesta versão do supabase-js, invoke sem corpo usa POST —
+    // passamos method GET explícito para a função devolver a chave pública.
+    const { data, error } = await supabase.functions.invoke('send-push', { method: 'GET' });
+    const key = data?.publicKey;
+    if (!error && typeof key === 'string' && key) {
+      localStorage.setItem(VAPID_CACHE_KEY, key);
+      return key;
+    }
+    return null;
+  } catch (err) {
+    console.error('[Supabase] Falha ao obter chave VAPID:', err);
+    return null;
+  }
+};
+
+/** Salva (ou atualiza) a assinatura de push deste aparelho no banco. */
+export const savePushSubscription = async (sub: PushSubscription): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  const json = sub.toJSON() as { endpoint?: string; keys?: { auth?: string; p256dh?: string } };
+  if (!json.endpoint || !json.keys?.auth || !json.keys?.p256dh) return false;
+  try {
+    const { error } = await supabase.from('push_subscriptions').upsert(
+      {
+        endpoint: json.endpoint,
+        keys_auth: json.keys.auth,
+        keys_p256dh: json.keys.p256dh,
+      },
+      { onConflict: 'endpoint' },
+    );
+    if (error) {
+      console.error('[Supabase] Falha ao salvar assinatura de push:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Falha ao salvar assinatura de push:', err);
+    return false;
+  }
+};
+
+/** Remove a assinatura de push deste aparelho do banco. */
+export const deletePushSubscription = async (endpoint: string): Promise<void> => {
+  const supabase = getSupabase();
+  if (!supabase || !endpoint) return;
+  try {
+    await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  } catch (err) {
+    console.error('[Supabase] Falha ao remover assinatura de push:', err);
+  }
+};
+
+/**
+ * Envia uma notificação push para TODOS os aparelhos assinados (Edge Function).
+ * Assim a família é avisada mesmo com o app fechado ou instalado como PWA.
+ */
+export const sendPushNotification = async (
+  title: string,
+  body: string,
+  url = '/',
+  tag = 'familiapp-push',
+): Promise<void> => {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  try {
+    await supabase.functions.invoke('send-push', { body: { title, body, url, tag } });
+  } catch (err) {
+    console.error('[Supabase] Falha ao enviar push:', err);
+  }
+};
