@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Caixa do modal: a altura máxima é sempre limitada pela tela, com fallback
+   para navegadores que ainda não suportam a unidade dvh. Garante que o rodapé
+   fixo (Salvar/Cancelar) nunca fique cortado ou escondido atrás do teclado. */
+.modal-box {
+  max-height: calc(100vh - 3rem);
+}
+
+@supports (height: 100dvh) {
+  .modal-box {
+    max-height: calc(100dvh - 3rem);
+  }
+}
+
+@media (min-width: 768px) {
+  .modal-box {
+    max-height: 90vh;
+  }
+
+  @supports (height: 100dvh) {
+    .modal-box {
+      max-height: 90dvh;
+    }
+  }
+}
+
 /* Barra de rolagem personalizada usada em todo o app */
 .custom-scrollbar::-webkit-scrollbar {
   width: 8px;
