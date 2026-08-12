@@ -64,9 +64,18 @@ npm run typecheck
 ### Configurações
 - **Família**: adicionar/remover/editar membros com nome, papel, **cor de identificação personalizada** e **foto de perfil** (upload de imagem, com fallback para emoji). A cor e a foto são refletidas em todo o app na hora.
 - **Evolution API (WhatsApp)**: configure URL da API, instância, API Key e número de destino para enviar avisos reais.
-- **Push Notifications**: habilite alertas nativos do navegador.
+- **Push Notifications**: habilite alertas nativos, escolha o lembrete dos compromissos (15 min / 1 h / 1 dia antes) e teste a notificação. Lembretes agendados (Notification Triggers) disparam **mesmo com o app fechado** no Chrome (Android/desktop).
 
 > ⚠️ **Nota sobre dados**: atualmente os dados ficam em memória (React state) e são perdidos ao recarregar a página. Os dados de exemplo estão em `src/data/initialData.ts`.
+
+## 📱 PWA e notificações push
+
+O app é um **PWA**: instale na tela inicial do celular (Android: menu do navegador → "Adicionar à tela inicial"; iOS: Compartilhar → "Adicionar à Tela de Início") para abrir em tela cheia, com ícone próprio e suporte offline. Os arquivos ficam em `public/` (`manifest.webmanifest`, `sw.js` e `icons/`).
+
+- **Service worker** (`public/sw.js`): registrado em `src/main.tsx`, cuida do cache offline, do clique em notificações e do recebimento de push.
+- **Lembretes agendados**: em Configurações → Push, escolha quando lembrar dos compromissos. Os lembretes são agendados no service worker e disparam mesmo com o app fechado (navegadores com suporte a Notification Triggers).
+- **Push de servidor (Web Push)**: em Configurações → Push → "Push de servidor (avançado)", informe a chave pública VAPID para assinar. O envio real das mensagens precisa de um backend que use a assinatura armazenada — o app já está pronto para recebê-las.
+- **Ícones**: gere novamente com `node scripts/generate-icons.mjs` (PNGs sem dependências externas).
 
 ## 🔔 Integrações de avisos
 

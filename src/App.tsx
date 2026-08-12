@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Bell,
   Calendar as CalendarIcon,
@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Avatar from './components/Avatar';
+import Logo from './components/Logo';
+import SplashScreen from './components/SplashScreen';
 import CalendarGridView from './components/CalendarGridView';
 import CalendarListView from './components/CalendarListView';
 import SettingsView from './components/SettingsView';
@@ -18,6 +20,8 @@ import UserSwitcherSheet from './components/UserSwitcherSheet';
 import { initialEvents, initialShoppingItems, initialUsers } from './data/initialData';
 import type { EvolutionConfig, FamilyEvent, ShoppingItem, Toast, ToastType, User } from './types';
 import { isImageAvatar } from './utils';
+import { getReminderOffset, scheduleEventReminders, setReminderOffset as persistReminderOffset } from './utils/push';
+import type { ReminderOffset } from './utils/push';
 
 type Tab = 'calendar' | 'shopping' | 'settings';
 
@@ -35,6 +39,23 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<Tab>('calendar');
   const [isUserSheetOpen, setIsUserSheetOpen] = useState(false);
   const [notifications, setNotifications] = useState<Toast[]>([]);
+  const [splashVisible, setSplashVisible] = useState(true);
+  const [splashFading, setSplashFading] = useState(false);
+
+  // Efeito de abertura estilo app: mostra a logo e some sozinho
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashFading(true), 1900);
+    const t2 = setTimeout(() => setSplashVisible(false), 2350);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
+  const skipSplash = () => {
+    setSplashFading(true);
+    setTimeout(() => setSplashVisible(false), 400);
+  };
 
   const [calendarView, setCalendarView] = useState<'list' | 'grid'>('list');
   const [evolutionConfig, setEvolutionConfig] = useState<EvolutionConfig>({
@@ -49,6 +70,18 @@ const App = () => {
 
   const [events, setEvents] = useState<FamilyEvent[]>(initialEvents);
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(initialShoppingItems);
+
+  // Lembretes de compromissos (Notification Triggers): funcionam com o app fechado
+  const [reminderOffset, setReminderOffsetState] = useState<ReminderOffset>(getReminderOffset);
+  const setReminderOffset = (value: ReminderOffset) => {
+    persistReminderOffset(value);
+    setReminderOffsetState(value);
+  };
+
+  // Reagenda os lembretes sempre que os eventos ou a preferência mudarem
+  useEffect(() => {
+    scheduleEventReminders(events);
+  }, [events, reminderOffset]);
 
   const showNotification = (title: string, message: string, type: ToastType = 'info') => {
     const id = Date.now();
@@ -102,15 +135,13 @@ const App = () => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-[#09090b] text-white font-sans overflow-hidden selection:bg-pink-500/30">
+    <div className="flex flex-col md:flex-row h-screen supports-[height:100dvh]:h-dvh bg-[#09090b] text-white font-sans overflow-hidden selection:bg-pink-500/30">
+      {/* Efeito de abertura (splash) */}
+      {splashVisible && <SplashScreen fading={splashFading} onSkip={skipSplash} />}
+
       {/* Header mobile */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#121214] border-b border-zinc-800 shrink-0 z-20 relative">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-pink-500 flex items-center justify-center font-bold text-white shadow-lg">
-            F
-          </div>
-          <span className="font-bold text-lg tracking-tight">FamíliaApp</span>
-        </div>
+      <div className="md:hidden flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 bg-[#121214] border-b border-zinc-800 shrink-0 z-20 relative">
+        <Logo size="sm" />
         {/* Toque no avatar para trocar de usuário */}
         <button
           onClick={() => setIsUserSheetOpen(true)}
@@ -127,10 +158,7 @@ const App = () => {
       {/* Sidebar (desktop) */}
       <div className="hidden md:flex flex-col w-64 bg-[#121214] border-r border-zinc-800 shrink-0">
         <div className="p-6 items-center gap-3 shrink-0 flex">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-orange-400 flex items-center justify-center font-bold text-white shadow-lg text-xl">
-            F
-          </div>
-          <span className="font-bold text-xl tracking-tight">FamíliaApp</span>
+          <Logo size="md" />
         </div>
 
         <div className="flex-1 py-4 px-4 space-y-2 overflow-y-auto custom-scrollbar">
@@ -236,6 +264,8 @@ const App = () => {
             setEvolutionConfig={setEvolutionConfig}
             pushGranted={pushGranted}
             setPushGranted={setPushGranted}
+            reminderOffset={reminderOffset}
+            setReminderOffset={setReminderOffset}
             showNotification={showNotification}
           />
         )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import Avatar from './Avatar';
@@ -31,6 +31,44 @@ const CalendarGridView = ({
   const monthName = capitalize(
     new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(currentDate),
   );
+
+  // ——— Resumo do mês ———
+  const monthEvents = events.filter(
+    (e) =>
+      e.date.getFullYear() === currentDate.getFullYear() &&
+      e.date.getMonth() === currentDate.getMonth(),
+  );
+  const totalEvents = monthEvents.length;
+
+  const countsByUser = users.map((user) => ({
+    user,
+    count: monthEvents.filter((e) => e.userId === user.id).length,
+  }));
+
+  const dayCounts = Array.from({ length: daysInMonth }, (_, i) => ({
+    day: i + 1,
+    count: monthEvents.filter((e) => e.date.getDate() === i + 1).length,
+  }));
+  const minDayCount = dayCounts.reduce((min, d) => Math.min(min, d.count), Infinity);
+  const bestDays = dayCounts.filter((d) => d.count === minDayCount).slice(0, 6);
+
+  // Faixas de 1h ocupadas por compromissos no mês
+  const occupiedHours = new Set<number>();
+  monthEvents.forEach((e) => {
+    const [sh] = e.time.split(':').map(Number);
+    const [ehRaw] = (e.endTime ?? '').split(':').map(Number);
+    const endHour = e.endTime && !Number.isNaN(ehRaw) && ehRaw > sh ? ehRaw : sh + 1;
+    for (let h = sh; h < endHour; h++) occupiedHours.add(h);
+  });
+  // Horas livres entre 07h e 20h
+  const freeHours = Array.from({ length: 14 }, (_, i) => i + 7)
+    .filter((h) => !occupiedHours.has(h))
+    .slice(0, 4);
+
+  const weekdayShort = (day: number) =>
+    new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(
+      new Date(currentDate.getFullYear(), currentDate.getMonth(), day),
+    );
 
   const handlePrevMonth = () =>
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -88,7 +126,7 @@ const CalendarGridView = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scrollbar px-4 pb-6 md:px-10 py-4 md:pb-24 bg-[#09090b]">
+    <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scrollbar px-4 pb-32 md:px-10 py-4 md:pb-24 bg-[#09090b]">
       <div className="flex justify-between items-center mb-4 md:mb-6 max-w-5xl mx-auto w-full">
         <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">{monthName}</h2>
         <div className="flex gap-2">
@@ -107,21 +145,25 @@ const CalendarGridView = ({
         </div>
       </div>
 
-      {/* Legenda de membros: cada cor pertence a um familiar */}
+      {/* Legenda de membros: foto de perfil de cada familiar, estilo rede social */}
       <div className="max-w-5xl mx-auto w-full flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-4 md:mb-6">
         {users.map((u) => (
           <span
             key={u.id}
-            className="flex items-center gap-1.5 text-[11px] md:text-xs font-semibold"
+            className="flex items-center gap-2 text-[11px] md:text-xs font-semibold"
             style={{ color: u.color }}
           >
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
+            <Avatar
+              user={u}
+              className="w-6 h-6 rounded-full text-xs shrink-0"
+              style={{ boxShadow: `0 0 0 2px ${u.color}` }}
+            />
             {u.name}
           </span>
         ))}
       </div>
 
-      <div className="max-w-5xl mx-auto w-full flex-1 min-h-0 flex flex-col">
+      <div className="max-w-5xl mx-auto w-full flex flex-col">
         <div className="grid grid-cols-7 gap-1 md:gap-4 mb-2 md:mb-4 shrink-0">
           {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((day) => (
             <div
@@ -133,7 +175,7 @@ const CalendarGridView = ({
           ))}
         </div>
 
-        <div className="flex-1 min-h-0 grid grid-cols-7 gap-1 md:gap-4 auto-rows-fr md:auto-rows-auto content-start">
+        <div className="grid grid-cols-7 gap-1 md:gap-4 auto-rows-[minmax(64px,1fr)] md:auto-rows-auto content-start">
           {Array.from({ length: firstDayOfMonth }).map((_, i) => (
             <div key={`empty-${i}`} className="md:h-28 rounded-2xl bg-transparent"></div>
           ))}
@@ -170,7 +212,7 @@ const CalendarGridView = ({
                         }`}
                         style={{ backgroundColor: eventUser.color }}
                       >
-                        {/* Mobile: avatar + hora em destaque, título na linha de baixo */}
+                        {/* Mobile: avatar + título na 1ª linha, hora completa na 2ª (cabe em telas estreitas) */}
                         <span className="md:hidden block w-full px-1 py-0.5">
                           <span className="flex items-center gap-1 min-w-0">
                             <Avatar
@@ -178,10 +220,10 @@ const CalendarGridView = ({
                               className="w-3.5 h-3.5 rounded-full ring-1 ring-white/50 shrink-0 text-[8px]"
                             />
                             <span className="block text-[9px] leading-[11px] font-bold truncate min-w-0">
-                              {event.time}
+                              {event.title}
                             </span>
                           </span>
-                          <span className="block text-[8px] leading-[10px] text-white/85 truncate">{event.title}</span>
+                          <span className="block text-[8px] leading-[10px] text-white/80 truncate">{event.time}</span>
                         </span>
                         {/* Desktop: avatar + hora · título na mesma linha */}
                         <span className="hidden md:flex items-center gap-1 min-w-0">
@@ -207,6 +249,72 @@ const CalendarGridView = ({
         </div>
       </div>
 
+      {/* Resumo do mês: contagem por membro, melhores dias e horários */}
+      <div className="max-w-5xl mx-auto w-full mt-4 md:mt-6 bg-[#121214] border border-zinc-800 rounded-2xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-pink-500" /> Resumo do mês
+          </h3>
+          <span className="text-xs font-semibold text-zinc-400">
+            {totalEvents} {totalEvents === 1 ? 'compromisso' : 'compromissos'}
+          </span>
+        </div>
+
+        {/* Contagem por membro */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {countsByUser.map(({ user, count }) => (
+            <span
+              key={user.id}
+              className="flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full border"
+              style={{
+                color: user.color,
+                borderColor: `${user.color}40`,
+                backgroundColor: `${user.color}12`,
+              }}
+            >
+              <Avatar user={user} className="w-4 h-4 rounded-full text-[9px] shrink-0" />
+              {user.name}: {count}
+            </span>
+          ))}
+        </div>
+
+        {/* Melhores dias para marcar */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs mb-1.5">
+          <span className="font-bold text-zinc-300 mr-0.5">Melhores dias:</span>
+          {bestDays.map((d) => (
+            <button
+              key={d.day}
+              onClick={() => handleDayClick(d.day)}
+              title="Ver este dia"
+              className="px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 font-medium hover:border-pink-500 hover:text-white transition-colors"
+            >
+              {d.day} {weekdayShort(d.day)}
+            </button>
+          ))}
+          <span className="text-zinc-500">
+            {minDayCount === 0 ? '(sem compromissos)' : '(dias com menos compromissos)'}
+          </span>
+        </div>
+
+        {/* Melhores horários */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="font-bold text-zinc-300 mr-0.5">Melhores horários:</span>
+          {freeHours.length > 0 ? (
+            freeHours.map((h) => (
+              <span
+                key={h}
+                className="px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 font-medium"
+              >
+                {String(h).padStart(2, '0')}h
+              </span>
+            ))
+          ) : (
+            <span className="text-zinc-500">—</span>
+          )}
+          <span className="text-zinc-500">(livres no mês)</span>
+        </div>
+      </div>
+
       {/* Modal de detalhes do dia */}
       {selectedDate && (
         <Modal
@@ -224,26 +332,23 @@ const CalendarGridView = ({
                   return (
                     <div
                       key={event.id}
-                      className="flex items-stretch gap-3 bg-[#09090b] p-3 rounded-xl border border-zinc-800"
+                      className="flex items-start gap-3 bg-[#09090b] p-3 rounded-xl border border-zinc-800"
                     >
-                      <div
-                        className="w-1.5 rounded-full shrink-0"
-                        style={{ backgroundColor: eventUser.color }}
-                      ></div>
-                      <div>
+                      <Avatar
+                        user={eventUser}
+                        className="w-10 h-10 rounded-full text-lg shrink-0"
+                        style={{ boxShadow: `0 0 0 2px ${eventUser.color}` }}
+                      />
+                      <div className="min-w-0">
                         <p className="font-bold text-white md:text-lg">{event.title}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
                           <span className="text-zinc-400 text-xs md:text-sm">
                             {event.time} {event.endTime ? `→ ${event.endTime}` : ''}
                           </span>
                           <span
-                            className="flex items-center gap-1 text-[10px] md:text-xs px-2 py-0.5 rounded-full border border-zinc-700 font-bold"
+                            className="text-[10px] md:text-xs px-2 py-0.5 rounded-full border border-zinc-700 font-bold"
                             style={{ color: eventUser.color, backgroundColor: `${eventUser.color}15` }}
                           >
-                            <Avatar
-                              user={eventUser}
-                              className="w-3.5 h-3.5 rounded-full ring-1 ring-white/30 shrink-0 text-[8px]"
-                            />
                             {eventUser.name}
                           </span>
                         </div>

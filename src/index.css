@@ -20,3 +20,86 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
+
+/* Logo animada estilo Instagram */
+.logo-gradient {
+  background-image: linear-gradient(
+    135deg,
+    #feda75 0%,
+    #fa7e1e 22%,
+    #d62976 48%,
+    #962fbf 72%,
+    #4f5bd5 100%
+  );
+  background-size: 200% 200%;
+  animation: logo-gradient-shift 6s ease-in-out infinite;
+}
+
+@keyframes logo-gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.logo-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 70%
+  );
+  transform: translateX(-160%);
+  animation: logo-shimmer-sweep 3.2s ease-in-out infinite;
+}
+
+@keyframes logo-shimmer-sweep {
+  0% {
+    transform: translateX(-160%);
+  }
+  60%,
+  100% {
+    transform: translateX(160%);
+  }
+}
+
+/* Abertura estilo app (splash) */
+.logo-pop {
+  animation: logo-pop 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes logo-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-10deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.1) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+.logo-pulse-ring {
+  border: 2px solid rgba(214, 41, 118, 0.55);
+  animation: logo-ring-pulse 2s ease-out infinite;
+}
+
+@keyframes logo-ring-pulse {
+  0% {
+    transform: scale(0.65);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}

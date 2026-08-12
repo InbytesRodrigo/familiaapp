@@ -69,15 +69,19 @@ const CalendarListView = ({
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar bg-black text-white relative">
       <div className="max-w-3xl mx-auto p-4 md:p-8 pb-32">
-        {/* Legenda de membros: cada cor pertence a um familiar */}
+        {/* Legenda de membros: foto de perfil de cada familiar, estilo rede social */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-8">
           {users.map((u) => (
             <span
               key={u.id}
-              className="flex items-center gap-1.5 text-xs font-semibold"
+              className="flex items-center gap-2 text-xs font-semibold"
               style={{ color: u.color }}
             >
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
+              <Avatar
+                user={u}
+                className="w-6 h-6 rounded-full text-xs shrink-0"
+                style={{ boxShadow: `0 0 0 2px ${u.color}` }}
+              />
               {u.name}
             </span>
           ))}
@@ -114,18 +118,19 @@ const CalendarListView = ({
                   .map((event) => {
                     const eventUser = users.find((u) => u.id === event.userId) || currentUser;
                     return (
-                      <div key={event.id} className="flex items-start gap-4 group">
-                        {/* Barra colorida */}
-                        <div
-                          className="w-1.5 h-12 rounded-full shrink-0"
-                          style={{ backgroundColor: eventUser.color }}
-                        ></div>
+                      <div key={event.id} className="flex items-start gap-3 group">
+                        {/* Foto de perfil do responsável, com anel na cor do membro (estilo rede social) */}
+                        <Avatar
+                          user={eventUser}
+                          className="w-11 h-11 rounded-full text-xl shrink-0"
+                          style={{ boxShadow: `0 0 0 2px ${eventUser.color}` }}
+                        />
 
                         <div className="flex-1 pt-0.5">
                           <h4 className="text-lg md:text-xl font-bold text-zinc-100 group-hover:text-white transition-colors">
                             {event.title}
                           </h4>
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span className="text-xs md:text-sm font-medium text-zinc-500">
                               {event.time} {event.endTime ? `→ ${event.endTime}` : ''}
                             </span>
@@ -136,10 +141,6 @@ const CalendarListView = ({
                                 backgroundColor: `${eventUser.color}15`,
                               }}
                             >
-                              <Avatar
-                                user={eventUser}
-                                className="w-3.5 h-3.5 rounded-full ring-1 ring-white/30 shrink-0 text-[8px]"
-                              />
                               {eventUser.name}
                             </span>
                           </div>
