@@ -41,6 +41,8 @@ const eventToDb = (e: FamilyEvent): Row => ({
   criado_por: e.createdBy,
   alertar: e.alertar ?? false,
   gasto_id: e.gastoId ?? null,
+  concluido: e.concluido ?? false,
+  data_conclusao: e.dataConclusao ?? null,
 });
 
 const dbToEvent = (row: Row): FamilyEvent => {
@@ -56,6 +58,8 @@ const dbToEvent = (row: Row): FamilyEvent => {
     createdBy: String(row.criado_por ?? ''),
     alertar: Boolean(row.alertar),
     gastoId: row.gasto_id ? String(row.gasto_id) : undefined,
+    concluido: Boolean(row.concluido),
+    dataConclusao: row.data_conclusao ? String(row.data_conclusao) : undefined,
   };
 };
 

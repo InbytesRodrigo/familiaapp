@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Check, CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import Avatar from './Avatar';
 import { capitalize, isToday, toDateInput } from '../utils';
 import { newId } from '../lib/db';
 import type { FamilyEvent, Notify, User } from '../types';
+
+/** Formata YYYY-MM-DD como DD/MM. */
+const formatDateBR = (date: string): string => {
+  const [, m, d] = date.split('-');
+  return d && m ? `${d}/${m}` : date;
+};
 
 interface CalendarListViewProps {
   events: FamilyEvent[];
@@ -94,6 +100,28 @@ const CalendarListView = ({
     setIsEventModalOpen(true);
   };
 
+  const toggleConcluido = (event: FamilyEvent) => {
+    const concluido = !event.concluido;
+    setEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === event.id
+          ? { ...ev, concluido, dataConclusao: concluido ? toDateInput(new Date()) : undefined }
+          : ev,
+      ),
+    );
+    // Concluiu = visualizou: avisos somem e param de notificar
+    if (concluido) onVisualizarCompromisso(event.id);
+    simulateNotifications(
+      concluido ? 'Compromisso Concluído ✅' : 'De volta aos pendentes',
+      concluido
+        ? `"${event.title}" foi concluído (${formatDateBR(toDateInput(new Date()))}).`
+        : `"${event.title}" voltou para os pendentes.`,
+      'all',
+      'evento',
+      event.id,
+    );
+  };
+
   // Agrupa eventos por data
   const groupedEvents = events.reduce<Record<string, { date: Date; events: FamilyEvent[] }>>(
     (acc, event) => {
@@ -153,16 +181,26 @@ const CalendarListView = ({
                   .sort((a, b) => a.time.localeCompare(b.time))
                   .map((event) => {
                     const eventUser = users.find((u) => u.id === event.userId) || currentUser;
+                    // Parcelas de gasto são controladas pelo gasto (quitado) — sem botão de concluir
+                    const isParcela = Boolean(event.gastoId);
                     return (
-                      <button
+                      <div
                         key={event.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         onClick={() => openEventModal(event)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openEventModal(event);
+                          }
+                        }}
                         title="Editar / excluir"
-                        className="w-full flex items-start gap-3 group text-left border-l-4 border-transparent pl-2.5 rounded-lg py-1.5 transition-colors"
+                        className="w-full flex items-start gap-3 group text-left border-l-4 border-transparent pl-2.5 rounded-lg py-1.5 transition-colors cursor-pointer"
                         style={{
-                          borderLeftColor: eventUser.color,
+                          borderLeftColor: event.concluido ? '#22c55e' : eventUser.color,
                           backgroundColor: `${eventUser.color}0a`,
+                          opacity: event.concluido ? 0.75 : 1,
                         }}
                       >
                         {/* Foto de perfil do responsável, com anel na cor do membro (estilo rede social) */}
@@ -174,8 +212,10 @@ const CalendarListView = ({
 
                         <div className="flex-1 pt-0.5 min-w-0">
                           <h4
-                            className="text-lg md:text-xl font-medium transition-colors group-hover:brightness-125"
-                            style={{ color: eventUser.color }}
+                            className={`text-lg md:text-xl font-medium transition-colors group-hover:brightness-125 ${
+                              event.concluido ? 'line-through text-zinc-500' : ''
+                            }`}
+                            style={{ color: event.concluido ? undefined : eventUser.color }}
                           >
                             {event.title}
                           </h4>
@@ -197,10 +237,32 @@ const CalendarListView = ({
                             >
                               {eventUser.name}
                             </span>
+                            {event.concluido && event.dataConclusao && (
+                              <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-bold">
+                                <CheckCircle2 className="w-3 h-3" /> Concluído em {formatDateBR(event.dataConclusao)}
+                              </span>
+                            )}
                           </div>
                         </div>
+                        {!isParcela && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleConcluido(event);
+                            }}
+                            title={event.concluido ? 'Desmarcar conclusão' : 'Marcar como concluído'}
+                            className={`w-9 h-9 rounded-full border-2 flex items-center justify-center shrink-0 self-center transition-colors ${
+                              event.concluido
+                                ? 'bg-emerald-500 border-emerald-500 text-white'
+                                : 'border-emerald-500 text-transparent hover:bg-emerald-500/10'
+                            }`}
+                          >
+                            <Check className="w-5 h-5" />
+                          </button>
+                        )}
                         <Pencil className="w-4 h-4 text-zinc-600 group-hover:text-pink-400 self-center shrink-0" />
-                      </button>
+                      </div>
                     );
                   })}
               </div>

@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { BarChart3, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BarChart3, Check, CheckCircle2, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import Avatar from './Avatar';
 import { capitalize, isToday, toDateInput } from '../utils';
 import { newId } from '../lib/db';
 import type { FamilyEvent, Notify, User } from '../types';
+
+/** Formata YYYY-MM-DD como DD/MM. */
+const formatDateBR = (date: string): string => {
+  const [, m, d] = date.split('-');
+  return d && m ? `${d}/${m}` : date;
+};
 
 interface CalendarGridViewProps {
   events: FamilyEvent[];
@@ -107,6 +113,28 @@ const CalendarGridView = ({
     if (event.alertar) onVisualizarCompromisso(event.id);
     setEditingEvent(event);
     setIsEventModalOpen(true);
+  };
+
+  const toggleConcluido = (event: FamilyEvent) => {
+    const concluido = !event.concluido;
+    setEvents((prev) =>
+      prev.map((ev) =>
+        ev.id === event.id
+          ? { ...ev, concluido, dataConclusao: concluido ? toDateInput(new Date()) : undefined }
+          : ev,
+      ),
+    );
+    // Concluiu = visualizou: avisos somem e param de notificar
+    if (concluido) onVisualizarCompromisso(event.id);
+    simulateNotifications(
+      concluido ? 'Compromisso Concluído ✅' : 'De volta aos pendentes',
+      concluido
+        ? `"${event.title}" foi concluído (${formatDateBR(toDateInput(new Date()))}).`
+        : `"${event.title}" voltou para os pendentes.`,
+      'all',
+      'evento',
+      event.id,
+    );
   };
 
   const handleSubmitEvent = (e: FormEvent<HTMLFormElement>) => {
@@ -248,10 +276,10 @@ const CalendarGridView = ({
                     return (
                       <div
                         key={event.id}
-                        title={`${eventUser.name} — ${event.time}${event.endTime ? ` → ${event.endTime}` : ''} — ${event.title}`}
+                        title={`${eventUser.name} — ${event.time}${event.endTime ? ` → ${event.endTime}` : ''} — ${event.title}${event.concluido ? ' (concluído)' : ''}`}
                         className={`w-full rounded-md md:rounded truncate text-left font-semibold text-white/90 md:text-[10px] md:px-1.5 md:py-0.5 ${
                           idx > 1 ? 'hidden md:block' : ''
-                        }`}
+                        } ${event.concluido ? 'opacity-50' : ''}`}
                         style={{ backgroundColor: eventUser.color }}
                       >
                         {/* Mobile: avatar + título na 1ª linha, hora completa na 2ª (cabe em telas estreitas) */}
@@ -262,7 +290,7 @@ const CalendarGridView = ({
                               className="w-3.5 h-3.5 rounded-full ring-1 ring-white/50 shrink-0 text-[8px]"
                             />
                             <span className="block text-[9px] leading-[11px] font-bold truncate min-w-0">
-                              {event.title}
+                              {event.concluido ? '✓ ' : ''}{event.title}
                             </span>
                           </span>
                           <span className="block text-[8px] leading-[10px] text-white/80 truncate">{event.time}</span>
@@ -273,7 +301,7 @@ const CalendarGridView = ({
                             user={eventUser}
                             className="w-3 h-3 rounded-full ring-1 ring-white/50 shrink-0 text-[7px]"
                           />
-                          <span className="truncate min-w-0">{event.time} · {event.title}</span>
+                          <span className="truncate min-w-0">{event.time} · {event.concluido ? '✓ ' : ''}{event.title}</span>
                         </span>
                       </div>
                     );
@@ -371,13 +399,22 @@ const CalendarGridView = ({
                 .sort((a, b) => a.time.localeCompare(b.time))
                 .map((event) => {
                   const eventUser = users.find((u) => u.id === event.userId) || currentUser;
+                  // Parcelas de gasto são controladas pelo gasto (quitado) — sem botão de concluir
+                  const isParcela = Boolean(event.gastoId);
                   return (
-                    <button
+                    <div
                       key={event.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => openEditModal(event)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openEditModal(event);
+                        }
+                      }}
                       title="Editar / excluir"
-                      className="w-full flex items-start gap-3 bg-[#09090b] p-3 rounded-xl border border-zinc-800 hover:border-zinc-600 transition-colors text-left group"
+                      className="w-full flex items-start gap-3 bg-[#09090b] p-3 rounded-xl border border-zinc-800 hover:border-zinc-600 transition-colors text-left group cursor-pointer"
                     >
                       <Avatar
                         user={eventUser}
@@ -385,7 +422,11 @@ const CalendarGridView = ({
                         style={{ boxShadow: `0 0 0 2px ${eventUser.color}` }}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-white md:text-lg">{event.title}</p>
+                        <p
+                          className={`font-bold md:text-lg ${event.concluido ? 'line-through text-zinc-500' : 'text-white'}`}
+                        >
+                          {event.title}
+                        </p>
                         {event.descricao && (
                           <p className="text-zinc-400 text-xs md:text-sm leading-snug mt-1 line-clamp-2 whitespace-pre-line">
                             {event.descricao}
@@ -401,10 +442,32 @@ const CalendarGridView = ({
                           >
                             {eventUser.name}
                           </span>
+                          {event.concluido && event.dataConclusao && (
+                            <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-bold">
+                              <CheckCircle2 className="w-3 h-3" /> Concluído em {formatDateBR(event.dataConclusao)}
+                            </span>
+                          )}
                         </div>
                       </div>
+                      {!isParcela && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleConcluido(event);
+                          }}
+                          title={event.concluido ? 'Desmarcar conclusão' : 'Marcar como concluído'}
+                          className={`w-9 h-9 rounded-full border-2 flex items-center justify-center shrink-0 self-center transition-colors ${
+                            event.concluido
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'border-emerald-500 text-transparent hover:bg-emerald-500/10'
+                          }`}
+                        >
+                          <Check className="w-5 h-5" />
+                        </button>
+                      )}
                       <Pencil className="w-4 h-4 text-zinc-600 group-hover:text-pink-400 self-center shrink-0" />
-                    </button>
+                    </div>
                   );
                 })
             ) : (

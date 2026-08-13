@@ -20,6 +20,10 @@ export interface FamilyEvent {
   alertar?: boolean;
   /** Gasto compartilhado que gerou este compromisso (parcelas) — usado p/ sincronizar o calendário. */
   gastoId?: string;
+  /** Concluído: compromisso realizado. */
+  concluido?: boolean;
+  /** Data em que foi concluído (YYYY-MM-DD) — registrada ao marcar concluído. */
+  dataConclusao?: string;
 }
 
 export interface ShoppingItem {

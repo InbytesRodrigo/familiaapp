@@ -358,7 +358,7 @@ const App = () => {
     const renotify = () => {
       // Agenda (compromissos com "Alertar o parceiro")
       for (const ev of eventsRef.current) {
-        if (!ev.alertar) continue;
+        if (!ev.alertar || ev.concluido) continue;
         const aviso = avisosRef.current.find((a) => a.refId === ev.id);
         if (!aviso || aviso.lida) continue;
         const owner = usersRef.current.find((u) => u.id === ev.userId);

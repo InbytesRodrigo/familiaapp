@@ -26,6 +26,8 @@ create table if not exists public.compromissos (
   criado_em timestamptz not null default now(),
   alertar boolean not null default false, -- "Alertar o parceiro": notifica até visualizar
   gasto_id uuid          -- parcela de gasto compartilhado (compromisso automático)
+  concluido boolean not null default false, -- concluir compromisso
+  data_conclusao date    -- quando foi concluído
 );
 create index if not exists idx_compromissos_gasto on public.compromissos (gasto_id);
 
