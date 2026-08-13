@@ -138,7 +138,7 @@ const CalendarListView = ({
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar bg-black text-white relative">
-      <div className="max-w-3xl mx-auto p-4 md:p-8 pb-32">
+      <div className="max-w-3xl mx-auto p-4 md:p-8 pb-36">
         {sortedDates.map((group, index) => {
           const groupIsToday = isToday(group.date);
           const dayNumber = group.date.getDate();
@@ -248,14 +248,14 @@ const CalendarListView = ({
                             e.stopPropagation();
                             toggleConcluido(event);
                           }}
-                            title={event.concluido ? 'Desmarcar conclusão' : 'Marcar como concluído'}
-                            className={`w-9 h-9 rounded-full border-2 flex items-center justify-center shrink-0 self-center transition-colors ${
-                              event.concluido
-                                ? 'bg-emerald-500 border-emerald-500 text-white'
-                                : 'border-emerald-500 text-transparent hover:bg-emerald-500/10'
-                            }`}
-                          >
-                            <Check className="w-5 h-5" />
+                          title={event.concluido ? 'Desmarcar conclusão' : 'Marcar como concluído'}
+                          className={`w-8 h-8 rounded-full border flex items-center justify-center shrink-0 self-center transition-all duration-200 ${
+                            event.concluido
+                              ? 'bg-emerald-500/90 border-emerald-500/90 text-white shadow-sm shadow-emerald-500/30'
+                              : 'border-emerald-500/35 bg-emerald-500/[0.06] text-transparent hover:bg-emerald-500/10 hover:border-emerald-500/60'
+                          }`}
+                        >
+                          <Check className="w-4 h-4" strokeWidth={2.5} />
                         </button>
                         <Pencil className="w-4 h-4 text-zinc-600 group-hover:text-pink-400 self-center shrink-0" />
                       </div>
@@ -270,12 +270,13 @@ const CalendarListView = ({
         )}
       </div>
 
-      {/* Botão flutuante (FAB) */}
+      {/* Botão flutuante (FAB): fixo, sempre visível acima do menu (com safe-area) */}
       <button
         onClick={() => openEventModal(null)}
-        className="absolute bottom-24 md:bottom-8 right-8 w-16 h-16 bg-pink-500 hover:bg-pink-400 text-white rounded-full shadow-[0_0_20px_rgba(236,72,153,0.4)] flex items-center justify-center transition-transform hover:scale-105 z-10"
+        aria-label="Adicionar compromisso"
+        className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] md:bottom-8 right-6 w-14 h-14 md:w-16 md:h-16 bg-pink-500 hover:bg-pink-400 text-white rounded-full shadow-[0_0_20px_rgba(236,72,153,0.4)] flex items-center justify-center transition-transform hover:scale-105 z-30"
       >
-        <Plus className="w-8 h-8" />
+        <Plus className="w-7 h-7 md:w-8 md:h-8" />
       </button>
 
       {/* Modal de novo/editar compromisso */}

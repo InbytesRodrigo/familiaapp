@@ -446,21 +446,21 @@ const CalendarGridView = ({
                             </span>
                           )}
                         </div>
-                      </div>
-                      <button
+                      </div>                      <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleConcluido(event);
                         }}
-                          title={event.concluido ? 'Desmarcar conclusão' : 'Marcar como concluído'}
-                          className={`w-9 h-9 rounded-full border-2 flex items-center justify-center shrink-0 self-center transition-colors ${
-                            event.concluido
-                              ? 'bg-emerald-500 border-emerald-500 text-white'
-                              : 'border-emerald-500 text-transparent hover:bg-emerald-500/10'
-                          }`}
-                        >                            <Check className="w-5 h-5" />
-                        </button>
+                        title={event.concluido ? 'Desmarcar conclusão' : 'Marcar como concluído'}
+                        className={`w-8 h-8 rounded-full border flex items-center justify-center shrink-0 self-center transition-all duration-200 ${
+                          event.concluido
+                            ? 'bg-emerald-500/90 border-emerald-500/90 text-white shadow-sm shadow-emerald-500/30'
+                            : 'border-emerald-500/35 bg-emerald-500/[0.06] text-transparent hover:bg-emerald-500/10 hover:border-emerald-500/60'
+                        }`}
+                      >
+                        <Check className="w-4 h-4" strokeWidth={2.5} />
+                      </button>
                       <Pencil className="w-4 h-4 text-zinc-600 group-hover:text-pink-400 self-center shrink-0" />
                     </div>
                   );
