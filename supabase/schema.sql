@@ -44,6 +44,17 @@ create index if not exists idx_compromissos_data on public.compromissos (data);
 create index if not exists idx_compromissos_membro on public.compromissos (membro_id);
 create index if not exists idx_mercado_comprado on public.mercado (comprado);
 
+-- Compromissos do Filho (lista com alerta e data de conclusão)
+create table if not exists public.compromissos_filho (
+  id uuid primary key default gen_random_uuid(),
+  titulo text not null,
+  data_compromisso date,
+  concluido boolean not null default false,
+  data_conclusao date,
+  alertar boolean not null default false,
+  criado_em timestamptz not null default now()
+);
+
 -- Presença online/offline (quem está usando o app agora)
 create table if not exists public.presenca (
   membro_id uuid primary key references public.familia(id) on delete cascade,
@@ -82,6 +93,13 @@ create policy "presenca_leitura" on public.presenca for select using (true);
 create policy "presenca_insercao" on public.presenca for insert with check (true);
 create policy "presenca_atualizacao" on public.presenca for update using (true);
 create policy "presenca_exclusao" on public.presenca for delete using (true);
+
+alter table public.compromissos_filho enable row level security;
+
+create policy "filho_leitura" on public.compromissos_filho for select using (true);
+create policy "filho_insercao" on public.compromissos_filho for insert with check (true);
+create policy "filho_atualizacao" on public.compromissos_filho for update using (true);
+create policy "filho_exclusao" on public.compromissos_filho for delete using (true);
 
 -- Entrega instantânea da presença entre aparelhos (Supabase Realtime)
 do $$

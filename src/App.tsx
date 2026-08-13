@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
+  Baby,
   Bell,
   Calendar as CalendarIcon,
   Check,
@@ -20,9 +21,20 @@ import CalendarGridView from './components/CalendarGridView';
 import CalendarListView from './components/CalendarListView';
 import SettingsView from './components/SettingsView';
 import ShoppingView from './components/ShoppingView';
+import ChildCommitmentsView from './components/ChildCommitmentsView';
 import UserSwitcherSheet from './components/UserSwitcherSheet';
 import { initialEvents, initialShoppingItems, initialUsers } from './data/initialData';
-import type { Aviso, EvolutionConfig, FamilyEvent, MetodoLembrete, ShoppingItem, Toast, ToastType, User } from './types';
+import type {
+  Aviso,
+  ChildCommitment,
+  EvolutionConfig,
+  FamilyEvent,
+  MetodoLembrete,
+  ShoppingItem,
+  Toast,
+  ToastType,
+  User,
+} from './types';
 import { isImageAvatar, timeAgo } from './utils';
 import {
   getMetodosLembrete as getMetodosLocal,
@@ -30,6 +42,7 @@ import {
   setMetodosLembrete as persistMetodosLocal,
 } from './utils/push';
 import {
+  deleteChildCommitments,
   deleteEvents,
   deleteItems,
   deleteUsers,
@@ -44,6 +57,7 @@ import {
   saveMetodosLembrete,
   sendPushNotification,
   setPresenca,
+  syncChildCommitments,
   syncEvents,
   syncItems,
   syncUsers,
@@ -52,11 +66,12 @@ import { newId } from './lib/db';
 import type { FamilyData } from './lib/db';
 import { getSupabase as getSupabaseClient, isSupabaseConfigured } from './lib/supabase';
 
-type Tab = 'calendar' | 'shopping' | 'settings';
+type Tab = 'calendar' | 'shopping' | 'child' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: 'calendar', label: 'Agenda', icon: CalendarIcon },
   { id: 'shopping', label: 'Mercado', icon: ShoppingCart },
+  { id: 'child', label: 'Filho', icon: Baby },
   { id: 'settings', label: 'Configurações', icon: Settings },
 ];
 
@@ -112,11 +127,13 @@ const App = () => {
 
   const [events, setEvents] = useState<FamilyEvent[]>(() => (isSupabaseConfigured() ? [] : initialEvents));
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(() => (isSupabaseConfigured() ? [] : initialShoppingItems));
+  const [childCommitments, setChildCommitments] = useState<ChildCommitment[]>([]);
 
   // Espelhos do estado (para usar em callbacks sem closures antigos)
   const eventsRef = useRef(events);
   const usersRef = useRef(users);
   const itemsRef = useRef(shoppingItems);
+  const childRef = useRef(childCommitments);
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);
@@ -126,6 +143,9 @@ const App = () => {
   useEffect(() => {
     itemsRef.current = shoppingItems;
   }, [shoppingItems]);
+  useEffect(() => {
+    childRef.current = childCommitments;
+  }, [childCommitments]);
 
   // Métodos de lembrete ("quantas vezes / quanto tempo antes"): salvos no
   // navegador E no banco — o cron do servidor usa a mesma configuração.
@@ -325,6 +345,7 @@ const App = () => {
   useEffect(() => {
     if (connectionState !== 'connected') return;
     const renotify = () => {
+      // Agenda (compromissos com "Alertar o parceiro")
       for (const ev of eventsRef.current) {
         if (!ev.alertar) continue;
         const aviso = avisosRef.current.find((a) => a.refId === ev.id);
@@ -338,6 +359,25 @@ const App = () => {
               body,
               icon: owner?.avatar ?? currentUser.avatar,
               tag: `familiapp-importante-${ev.id}`,
+            });
+          } catch (err) {
+            console.error('Erro no Push Nativo:', err);
+          }
+        }
+      }
+      // Compromissos do Filho com "Alertar"
+      for (const c of childRef.current) {
+        if (!c.alertar || c.concluido) continue;
+        const aviso = avisosRef.current.find((a) => a.refId === c.id);
+        if (!aviso || aviso.lida) continue;
+        const body = `Compromisso do Filho: "${c.title}". Toque para visualizar.`;
+        void sendPushNotification(`⚠️ Filho: ${c.title}`, body, '/', `familiapp-filho-${c.id}`);
+        if (pushGranted && typeof Notification !== 'undefined') {
+          try {
+            new Notification(`⚠️ Filho: ${c.title}`, {
+              body,
+              icon: currentUser.avatar,
+              tag: `familiapp-filho-${c.id}`,
             });
           } catch (err) {
             console.error('Erro no Push Nativo:', err);
@@ -406,20 +446,24 @@ const App = () => {
   const lastEventsRef = useRef<FamilyEvent[]>(isSupabaseConfigured() ? [] : initialEvents);
   const lastUsersRef = useRef<User[]>(isSupabaseConfigured() ? [] : initialUsers);
   const lastItemsRef = useRef<ShoppingItem[]>(isSupabaseConfigured() ? [] : initialShoppingItems);
+  const lastChildRef = useRef<ChildCommitment[]>([]);
 
   // Aplica os dados vindos do servidor sem apagar mudanças locais ainda não sincronizadas
   const applyServerData = (data: FamilyData) => {
     const hasLocalPending =
       lastEventsRef.current !== eventsRef.current ||
       lastUsersRef.current !== usersRef.current ||
-      lastItemsRef.current !== itemsRef.current;
+      lastItemsRef.current !== itemsRef.current ||
+      lastChildRef.current !== childRef.current;
     if (hasLocalPending) return;
     lastEventsRef.current = data.events;
     lastUsersRef.current = data.users;
     lastItemsRef.current = data.items;
+    lastChildRef.current = data.child;
     setEvents(data.events);
     setUsers(data.users);
     setShoppingItems(data.items);
+    setChildCommitments(data.child);
     setCurrentUserId((cur) => (data.users.some((u) => u.id === cur) ? cur : data.users[0]?.id ?? cur));
     setConnectionState('connected');
   };
@@ -500,10 +544,29 @@ const App = () => {
     if (removed.length > 0) void deleteItems(removed);
   }, [shoppingItems]);
 
+  useEffect(() => {
+    const prev = lastChildRef.current;
+    if (prev === childCommitments) return;
+    lastChildRef.current = childCommitments;
+    const removed = prev.filter((c) => !childCommitments.some((n) => n.id === c.id)).map((c) => c.id);
+    void syncChildCommitments(childCommitments).then((ok) => {
+      if (!ok && isSupabaseConfigured()) {
+        showNotification(
+          'Erro ao salvar',
+          'Não foi possível salvar os compromissos do Filho. Verifique a conexão.',
+          'error',
+        );
+      }
+    });
+    if (removed.length > 0) void deleteChildCommitments(removed);
+  }, [childCommitments]);
+
   // Setters usados pelas views (a sincronização acontece nos efeitos acima)
   const setEventsSynced: React.Dispatch<React.SetStateAction<FamilyEvent[]>> = (value) => setEvents(value);
   const setUsersSynced: React.Dispatch<React.SetStateAction<User[]>> = (value) => setUsers(value);
   const setShoppingItemsSynced: React.Dispatch<React.SetStateAction<ShoppingItem[]>> = (value) => setShoppingItems(value);
+  const setChildCommitmentsSynced: React.Dispatch<React.SetStateAction<ChildCommitment[]>> = (value) =>
+    setChildCommitments(value);
 
   const showNotification = (title: string, message: string, type: ToastType = 'info') => {
     const id = Date.now();
@@ -751,6 +814,15 @@ const App = () => {
             currentUser={currentUser}
             users={users}
             simulateNotifications={simulatePushAndWhatsapp}
+          />
+        )}
+        {activeTab === 'child' && (
+          <ChildCommitmentsView
+            commitments={childCommitments}
+            setCommitments={setChildCommitmentsSynced}
+            currentUser={currentUser}
+            simulateNotifications={simulatePushAndWhatsapp}
+            onVisualizarCompromisso={visualizarCompromisso}
           />
         )}
         {activeTab === 'settings' && (

@@ -40,10 +40,23 @@ export interface Aviso {
   mensagem: string;
   deId: string;
   paraId: string; // 'all' ou id de um membro
-  tipo: 'evento' | 'mercado' | 'aviso' | 'presenca';
+  tipo: 'evento' | 'mercado' | 'aviso' | 'presenca' | 'filho';
   refId?: string;
   lida: boolean;
   criadoEm: string; // ISO
+}
+
+/** Compromisso do Filho: lista com alerta até visualizar e conclusão com data. */
+export interface ChildCommitment {
+  id: string;
+  title: string;
+  /** Data do compromisso (YYYY-MM-DD) — opcional. */
+  date?: string;
+  /** Alerta o parceiro até visualizar (importante). */
+  alertar: boolean;
+  concluido: boolean;
+  /** Data em que foi concluído (YYYY-MM-DD) — registrada ao marcar concluído. */
+  dataConclusao?: string;
 }
 
 /** Método de lembrete do push: avisar X minutos antes do compromisso. */

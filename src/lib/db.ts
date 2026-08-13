@@ -1,6 +1,6 @@
 import { getSupabase } from './supabase';
 import { initialEvents, initialShoppingItems, initialUsers } from '../data/initialData';
-import type { Aviso, FamilyEvent, MetodoLembrete, ShoppingItem, User } from '../types';
+import type { Aviso, ChildCommitment, FamilyEvent, MetodoLembrete, ShoppingItem, User } from '../types';
 
 const SEEDED_KEY = 'familiaapp:seeded';
 
@@ -78,12 +78,33 @@ const dbToItem = (row: Row): ShoppingItem => ({
   criadoEm: row.criado_em ? String(row.criado_em) : undefined,
 });
 
+// ——— Compromissos do Filho (lista com alerta e data de conclusão) ———
+
+const childToDb = (c: ChildCommitment): Row => ({
+  id: c.id,
+  titulo: c.title,
+  data_compromisso: c.date ?? null,
+  concluido: c.concluido,
+  data_conclusao: c.dataConclusao ?? null,
+  alertar: c.alertar ?? false,
+});
+
+const dbToChild = (row: Row): ChildCommitment => ({
+  id: String(row.id),
+  title: String(row.titulo ?? ''),
+  date: row.data_compromisso ? String(row.data_compromisso) : undefined,
+  concluido: Boolean(row.concluido),
+  dataConclusao: row.data_conclusao ? String(row.data_conclusao) : undefined,
+  alertar: Boolean(row.alertar),
+});
+
 // ——— Carga inicial + seed dos dados demo ———
 
 export interface FamilyData {
   users: User[];
   events: FamilyEvent[];
   items: ShoppingItem[];
+  child: ChildCommitment[];
 }
 
 /** Carrega tudo do Supabase; semeia os dados iniciais se o banco estiver vazio. Retorna null se não configurado. */
@@ -91,15 +112,17 @@ export const loadFromSupabase = async (): Promise<FamilyData | null> => {
   const supabase = getSupabase();
   if (!supabase) return null;
   try {
-    const [u, e, i] = await Promise.all([
+    const [u, e, i, c] = await Promise.all([
       supabase.from('familia').select('*').order('criado_em'),
       supabase.from('compromissos').select('*').order('data').order('hora'),
       supabase.from('mercado').select('*').order('criado_em'),
+      supabase.from('compromissos_filho').select('*').order('criado_em'),
     ]);
 
     const users = (u.data ?? []).map(dbToUser);
     const events = (e.data ?? []).map(dbToEvent);
     const items = (i.data ?? []).map(dbToItem);
+    const child = (c.data ?? []).map(dbToChild);
 
     // Primeira vez: banco vazio -> semeia os dados de exemplo
     if (users.length === 0 && events.length === 0 && items.length === 0 && !localStorage.getItem(SEEDED_KEY)) {
@@ -107,7 +130,7 @@ export const loadFromSupabase = async (): Promise<FamilyData | null> => {
       if (seeded) return seeded;
     }
 
-    return { users, events, items };
+    return { users, events, items, child };
   } catch (err) {
     console.error('[Supabase] Falha ao carregar dados:', err);
     return null;
@@ -150,6 +173,7 @@ const seedInitialData = async (): Promise<FamilyData | null> => {
       users: (inserted ?? []).map(dbToUser),
       events,
       items,
+      child: [],
     };
   } catch (err) {
     console.error('[Supabase] Falha ao semear dados iniciais:', err);
@@ -238,6 +262,40 @@ export const syncItems = async (items: ShoppingItem[]): Promise<boolean> => {
     return true;
   } catch (err) {
     console.error('[Supabase] Falha ao sincronizar mercado:', err);
+    return false;
+  }
+};
+
+/** Envia todos os compromissos do Filho (upsert). Retorna true se gravou com sucesso. */
+export const syncChildCommitments = async (child: ChildCommitment[]): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from('compromissos_filho').upsert(child.map(childToDb));
+    if (error) {
+      console.error('[Supabase] Falha ao sincronizar compromissos do Filho:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Falha ao sincronizar compromissos do Filho:', err);
+    return false;
+  }
+};
+
+/** Remove compromissos do Filho de verdade (para a exclusão não voltar ao recarregar). */
+export const deleteChildCommitments = async (ids: string[]): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase || ids.length === 0) return true;
+  try {
+    const { error } = await supabase.from('compromissos_filho').delete().in('id', ids);
+    if (error) {
+      console.error('[Supabase] Falha ao excluir compromissos do Filho:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Falha ao excluir compromissos do Filho:', err);
     return false;
   }
 };
