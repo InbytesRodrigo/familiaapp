@@ -4,8 +4,8 @@
  * - Agenda lembretes de compromissos que disparam mesmo com o app fechado
  *   (Notification Triggers, Chrome/Android)
  */
-/* v2: navegação agora é network-first — instalados recebem as atualizações sem ficar presos no cache antigo */
-const CACHE_NAME = 'familiapp-v2';
+/* v3: limpa o cache antigo (v2) para os instalados receberem logo a versão nova */
+const CACHE_NAME = 'familiapp-v3';
 /* Caminhos relativos: o app pode rodar na raiz ou em subpasta (ex.: GitHub Pages) */
 const SHELL = ['./', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
 const ICON = './icons/icon-192.png';

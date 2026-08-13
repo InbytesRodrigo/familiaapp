@@ -31,6 +31,7 @@ import {
 } from './utils/push';
 import {
   deleteEvents,
+  deleteItems,
   deleteUsers,
   loadAvisos,
   loadFromSupabase,
@@ -60,23 +61,26 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
 ];
 
 const App = () => {
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  // Começa vazio quando há Supabase (os dados reais carregam em seguida — evita piscar
+  // os dados de exemplo); sem conexão, mantém os dados demo para demonstração local.
+  const [users, setUsers] = useState<User[]>(() => (isSupabaseConfigured() ? [] : initialUsers));
   const [currentUserId, setCurrentUserId] = useState<string>(initialUsers[0].id);
   // Derivado do id para que cor/foto editadas nas Configurações reflitam na hora
-  const currentUser: User = users.find((u) => u.id === currentUserId) ?? users[0];
+  const currentUser: User = users.find((u) => u.id === currentUserId) ?? users[0] ?? initialUsers[0];
   const [activeTab, setActiveTab] = useState<Tab>('calendar');
   const [isUserSheetOpen, setIsUserSheetOpen] = useState(false);
   const [notifications, setNotifications] = useState<Toast[]>([]);
   const [splashVisible, setSplashVisible] = useState(true);
   const [splashFading, setSplashFading] = useState(false);
+  const splashShownAtRef = useRef(Date.now());
 
-  // Efeito de abertura estilo app: mostra a logo e some sozinho
+  // Teto de segurança do splash: nunca passa de ~6s, mesmo se a carga demorar
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashFading(true), 1900);
-    const t2 = setTimeout(() => setSplashVisible(false), 2350);
+    const fade = window.setTimeout(() => setSplashFading(true), 6000);
+    const hide = window.setTimeout(() => setSplashVisible(false), 6350);
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      window.clearTimeout(fade);
+      window.clearTimeout(hide);
     };
   }, []);
 
@@ -106,8 +110,8 @@ const App = () => {
     setLogoVariantState(v);
   };
 
-  const [events, setEvents] = useState<FamilyEvent[]>(initialEvents);
-  const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(initialShoppingItems);
+  const [events, setEvents] = useState<FamilyEvent[]>(() => (isSupabaseConfigured() ? [] : initialEvents));
+  const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(() => (isSupabaseConfigured() ? [] : initialShoppingItems));
 
   // Espelhos do estado (para usar em callbacks sem closures antigos)
   const eventsRef = useRef(events);
@@ -254,6 +258,19 @@ const App = () => {
   // Incrementa para recarregar os dados quando a conexão mudar (ex.: usuário conectou nas Configurações)
   const [connSetup, setConnSetup] = useState(0);
 
+  // Esconde o splash assim que a primeira carga de dados termina (não pisca o visual antigo)
+  useEffect(() => {
+    if (connectionState === 'connecting') return;
+    const elapsed = Date.now() - splashShownAtRef.current;
+    const delay = Math.max(0, 1600 - elapsed);
+    const fade = window.setTimeout(() => setSplashFading(true), delay);
+    const hide = window.setTimeout(() => setSplashVisible(false), delay + 350);
+    return () => {
+      window.clearTimeout(fade);
+      window.clearTimeout(hide);
+    };
+  }, [connectionState]);
+
   // ——— Presença online: marca quem abriu o app, avisa a família e mostra online ———
   useEffect(() => {
     if (connectionState !== 'connected') return;
@@ -386,9 +403,9 @@ const App = () => {
   }, [connectionState]);
 
   // Último estado já confirmado no banco (para detectar mudanças locais pendentes)
-  const lastEventsRef = useRef<FamilyEvent[]>(initialEvents);
-  const lastUsersRef = useRef<User[]>(initialUsers);
-  const lastItemsRef = useRef<ShoppingItem[]>(initialShoppingItems);
+  const lastEventsRef = useRef<FamilyEvent[]>(isSupabaseConfigured() ? [] : initialEvents);
+  const lastUsersRef = useRef<User[]>(isSupabaseConfigured() ? [] : initialUsers);
+  const lastItemsRef = useRef<ShoppingItem[]>(isSupabaseConfigured() ? [] : initialShoppingItems);
 
   // Aplica os dados vindos do servidor sem apagar mudanças locais ainda não sincronizadas
   const applyServerData = (data: FamilyData) => {
@@ -473,11 +490,14 @@ const App = () => {
     const prev = lastItemsRef.current;
     if (prev === shoppingItems) return;
     lastItemsRef.current = shoppingItems;
+    const removed = prev.filter((i) => !shoppingItems.some((n) => n.id === i.id)).map((i) => i.id);
     void syncItems(shoppingItems).then((ok) => {
       if (!ok && isSupabaseConfigured()) {
         showNotification('Erro ao salvar', 'Não foi possível salvar o mercado. Verifique a conexão.', 'error');
       }
     });
+    // Exclusão real no banco (senão o item voltava ao recarregar)
+    if (removed.length > 0) void deleteItems(removed);
   }, [shoppingItems]);
 
   // Setters usados pelas views (a sincronização acontece nos efeitos acima)

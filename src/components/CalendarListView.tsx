@@ -78,14 +78,10 @@ const CalendarListView = ({
   const handleDeleteEvent = () => {
     if (!editingEvent) return;
     if (!window.confirm(`Excluir o compromisso "${editingEvent.title}"?`)) return;
-    setEvents((prev) => prev.filter((ev) => ev.id !== editingEvent.id));
-    simulateNotifications(
-      'Compromisso Excluído',
-      `"${editingEvent.title}" foi removido.`,
-      'all',
-      'evento',
-      editingEvent.id,
-    );
+    const deletedId = editingEvent.id;
+    setEvents((prev) => prev.filter((ev) => ev.id !== deletedId));
+    // Exclusão não dispara push/aviso; apenas limpa os avisos antigos do compromisso
+    onVisualizarCompromisso(deletedId);
     setIsEventModalOpen(false);
     setEditingEvent(null);
   };

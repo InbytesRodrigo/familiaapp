@@ -239,6 +239,23 @@ export const syncItems = async (items: ShoppingItem[]): Promise<boolean> => {
   }
 };
 
+/** Remove itens do mercado de verdade (para a exclusão não voltar ao recarregar). */
+export const deleteItems = async (ids: string[]): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase || ids.length === 0) return true;
+  try {
+    const { error } = await supabase.from('mercado').delete().in('id', ids);
+    if (error) {
+      console.error('[Supabase] Falha ao excluir itens do mercado:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Falha ao excluir itens do mercado:', err);
+    return false;
+  }
+};
+
 // ——— Avisos entre membros (lido/não lido, com foto do remetente) ———
 
 const avisoToDb = (a: Aviso): Row => ({

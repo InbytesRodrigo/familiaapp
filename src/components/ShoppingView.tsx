@@ -72,14 +72,8 @@ const ShoppingView = ({
 
   const handleDeleteItem = (item: ShoppingItem) => {
     if (!window.confirm(`Excluir "${item.name}" da lista de mercado?`)) return;
+    // Exclusão não dispara push/aviso (só adicionar/editar avisa a família)
     setItems(items.filter((i) => i.id !== item.id));
-    simulateNotifications(
-      'Item Removido',
-      `${currentUser.name} removeu "${item.name}" do mercado.`,
-      'all',
-      'mercado',
-      item.id,
-    );
   };
 
   const handleSubmitItem = (e: FormEvent<HTMLFormElement>) => {

@@ -11,7 +11,8 @@ interface ModalProps {
 
 const Modal = ({ children, onClose, title, footer }: ModalProps) => (
   <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex justify-center items-end md:items-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-    <div className="bg-[#121214] border border-zinc-800 w-full max-w-md rounded-3xl shadow-2xl flex flex-col modal-box animate-in fade-in zoom-in duration-200 max-h-[92dvh] md:max-h-[85vh]">
+    {/* max-h com vh como fallback (alguns navegadores não suportam dvh) — os botões do rodapé nunca somem */}
+    <div className="bg-[#121214] border border-zinc-800 w-full max-w-md rounded-3xl shadow-2xl flex flex-col modal-box animate-in fade-in zoom-in duration-200 max-h-[90vh] supports-[height:100dvh]:max-h-[90dvh] md:max-h-[85vh] supports-[height:85dvh]:md:max-h-[85dvh]">
       <div className="flex justify-between items-center p-5 border-b border-zinc-800 shrink-0">
         <h3 className="text-xl font-bold text-white">{title}</h3>
         <button
