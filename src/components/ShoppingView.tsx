@@ -52,6 +52,8 @@ const ShoppingView = ({
   const [newItemPrice, setNewItemPrice] = useState('');
   const [newItemDate, setNewItemDate] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  // Relatório de gastos por mês (oculto no final da página)
+  const [showMonthReport, setShowMonthReport] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null);
   // Mês selecionado no relatório de gastos
@@ -299,33 +301,6 @@ const ShoppingView = ({
           </div>
         </div>
 
-        {/* Controle de gastos por mês */}
-        <div className="bg-[#121214] border border-zinc-800 rounded-3xl p-4 mb-8">
-          <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-pink-500" /> Gastos por mês
-          </h3>
-          <div className="space-y-2">
-            {monthStats.map(({ month, label, total }) => {
-              const selected = month.getTime() === reportMonth.getTime();
-              return (
-                <button
-                  key={month.getTime()}
-                  onClick={() => setReportMonth(month)}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors ${
-                    selected ? 'border-pink-500/40 bg-pink-500/10' : 'border-zinc-800 hover:border-zinc-600'
-                  }`}
-                >
-                  <span className="text-sm font-medium text-zinc-300 capitalize">{label}</span>
-                  <span className={`text-sm font-bold ${selected ? 'text-pink-400' : 'text-white'}`}>
-                    R$ {total.toFixed(2)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-
         {/* Lista ativa */}
         <div className="space-y-3 mb-8">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -422,7 +397,7 @@ const ShoppingView = ({
         </div>
 
         {/* Histórico de compras */}
-        <div>
+        <div className="mb-8">
           <button
             onClick={() => setShowArchived(!showArchived)}
             className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors mb-4 font-medium text-sm"
@@ -488,6 +463,44 @@ const ShoppingView = ({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Controle de gastos por mês (oculto no final, sem poluir o topo) */}
+        <div className="mt-8 pt-6 border-t border-zinc-800">
+          <button
+            onClick={() => setShowMonthReport(!showMonthReport)}
+            className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors mb-4 font-medium text-sm"
+          >
+            <BarChart3 className="w-4 h-4" />{' '}
+            {showMonthReport ? 'Ocultar Gastos por Mês' : 'Ver Gastos por Mês'}
+          </button>
+
+          {showMonthReport && (
+            <div className="bg-[#121214] border border-zinc-800 rounded-3xl p-4">
+              <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-pink-500" /> Gastos por mês
+              </h3>
+              <div className="space-y-2">
+                {monthStats.map(({ month, label, total }) => {
+                  const selected = month.getTime() === reportMonth.getTime();
+                  return (
+                    <button
+                      key={month.getTime()}
+                      onClick={() => setReportMonth(month)}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors ${
+                        selected ? 'border-pink-500/40 bg-pink-500/10' : 'border-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      <span className="text-sm font-medium text-zinc-300 capitalize">{label}</span>
+                      <span className={`text-sm font-bold ${selected ? 'text-pink-400' : 'text-white'}`}>
+                        R$ {total.toFixed(2)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
