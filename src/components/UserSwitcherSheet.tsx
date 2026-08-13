@@ -22,7 +22,10 @@ const UserSwitcherSheet = ({
     <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
     <div className="absolute bottom-0 inset-x-0 bg-[#121214] border-t border-zinc-800 rounded-t-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-5 duration-200">
       <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-4" />
-      <h3 className="text-lg font-bold text-white mb-4">Quem está usando?</h3>
+      <h3 className="text-lg font-bold text-white">Entrar como</h3>
+      <p className="text-xs text-zinc-500 mt-0.5 mb-4">
+        Sem senha — toque no perfil que está usando o app.
+      </p>
       <div className="space-y-2 mb-4">
         {users.map((u) => (
           <button

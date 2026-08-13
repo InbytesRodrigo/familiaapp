@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Camera, MessageSquare, Pencil, Plus, Smartphone, X } from 'lucide-react';
+import { Camera, MessageSquare, Pencil, Plus, RefreshCw, Smartphone, X } from 'lucide-react';
 import type { ChangeEvent, FormEvent } from 'react';
 import Avatar from './Avatar';
+import AvatarPhotoEditor from './AvatarPhotoEditor';
 import Logo from './Logo';
 import type { LogoVariant } from './Logo';
 import Modal from './Modal';
@@ -60,6 +61,8 @@ const SettingsView = ({
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [avatarPreview, setAvatarPreview] = useState('');
+  // Foto sendo ajustada (arquivo novo ou foto existente) — abre o editor de recorte
+  const [avatarEditSource, setAvatarEditSource] = useState<File | string | null>(null);
   const [isEvolutionOpen, setIsEvolutionOpen] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(() => !!getStoredSubscription());
   const [pushBusy, setPushBusy] = useState(false);
@@ -100,12 +103,14 @@ const SettingsView = ({
   const openAddUserModal = () => {
     setEditingUser(null);
     setAvatarPreview('');
+    setAvatarEditSource(null);
     setIsUserModalOpen(true);
   };
 
   const openEditUserModal = (user: User) => {
     setEditingUser(user);
     setAvatarPreview('');
+    setAvatarEditSource(null);
     setIsUserModalOpen(true);
   };
 
@@ -113,6 +118,7 @@ const SettingsView = ({
     setIsUserModalOpen(false);
     setEditingUser(null);
     setAvatarPreview('');
+    setAvatarEditSource(null);
   };
 
   const handleAvatarFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -128,9 +134,8 @@ const SettingsView = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => setAvatarPreview(String(reader.result));
-    reader.readAsDataURL(file);
+    // Abre o editor de recorte (arrastar para enquadrar + zoom) com o arquivo
+    setAvatarEditSource(file);
   };
 
   const handleSaveUser = (e: FormEvent<HTMLFormElement>) => {
@@ -757,48 +762,73 @@ const SettingsView = ({
                 </div>
               </div>
 
-              {/* Foto de perfil */}
+              {/* Foto de perfil — com ajuste manual (enquadrar + zoom) */}
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-1.5">Foto de Perfil</label>
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-full overflow-hidden bg-[#09090b] border border-zinc-800 flex items-center justify-center text-2xl shrink-0">
-                    {avatarPreview ? (
-                      <img src={avatarPreview} alt="Prévia" className="w-full h-full object-cover" />
-                    ) : editingUser && isImageAvatar(editingUser.avatar) ? (
-                      <img
-                        src={editingUser.avatar}
-                        alt={editingUser.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      '👤'
+                {avatarEditSource ? (
+                  <AvatarPhotoEditor
+                    source={avatarEditSource}
+                    onConfirm={(dataUrl) => {
+                      setAvatarPreview(dataUrl);
+                      setAvatarEditSource(null);
+                    }}
+                    onCancel={() => setAvatarEditSource(null)}
+                  />
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-full overflow-hidden bg-[#09090b] border border-zinc-800 flex items-center justify-center text-2xl shrink-0">
+                        {avatarPreview ? (
+                          <img src={avatarPreview} alt="Prévia" className="w-full h-full object-cover" />
+                        ) : editingUser && isImageAvatar(editingUser.avatar) ? (
+                          <img
+                            src={editingUser.avatar}
+                            alt={editingUser.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          '👤'
+                        )}
+                      </div>
+                      <label className="flex-1 cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleAvatarFile}
+                          className="hidden"
+                        />
+                        <span className="block text-center py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors text-sm flex items-center justify-center gap-2">
+                          <Camera className="w-4 h-4" /> Escolher foto
+                        </span>
+                      </label>
+                      {avatarPreview && (
+                        <button
+                          type="button"
+                          onClick={() => setAvatarPreview('')}
+                          className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors shrink-0"
+                          title="Remover foto"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                    {(avatarPreview || (editingUser && isImageAvatar(editingUser.avatar))) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAvatarEditSource(avatarPreview || (editingUser?.avatar ?? ''))
+                        }
+                        className="mt-3 w-full py-2.5 border border-dashed border-zinc-700 text-zinc-300 hover:border-pink-500/50 hover:text-pink-400 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
+                      >
+                        <RefreshCw className="w-4 h-4" /> Ajustar foto (enquadrar / zoom)
+                      </button>
                     )}
-                  </div>
-                  <label className="flex-1 cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarFile}
-                      className="hidden"
-                    />
-                    <span className="block text-center py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors text-sm flex items-center justify-center gap-2">
-                      <Camera className="w-4 h-4" /> Escolher foto
-                    </span>
-                  </label>
-                  {avatarPreview && (
-                    <button
-                      type="button"
-                      onClick={() => setAvatarPreview('')}
-                      className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors shrink-0"
-                      title="Remover foto"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-                <p className="text-[10px] text-zinc-500 mt-1.5">
-                  JPG ou PNG, até 2MB. A foto substitui o emoji no perfil.
-                </p>
+                    <p className="text-[10px] text-zinc-500 mt-1.5">
+                      JPG ou PNG, até 2MB. Depois de escolher, você enquadra e dá zoom antes de
+                      usar — e pode ajustar de novo quando quiser.
+                    </p>
+                  </>
+                )}
               </div>
 
             </form>

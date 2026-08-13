@@ -3,6 +3,7 @@ import {
   Bell,
   Calendar as CalendarIcon,
   Check,
+  ChevronDown,
   LayoutGrid,
   List,
   Settings,
@@ -408,16 +409,20 @@ const App = () => {
               </span>
             )}
           </button>
-          {/* Toque no avatar para trocar de usuário */}
+          {/* Entrar como: toque aqui para selecionar quem está usando o app (sem senha) */}
           <button
             onClick={() => setIsUserSheetOpen(true)}
-            className="rounded-full ring-2 ring-zinc-700 active:ring-pink-500 transition-all"
-            aria-label="Trocar de usuário"
+            className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full bg-zinc-800/70 border border-zinc-700/70 active:ring-2 active:ring-pink-500/60 transition-all"
+            aria-label="Entrar como outro usuário"
           >
             <Avatar
               user={currentUser}
-              className="w-9 h-9 rounded-full text-lg shadow-inner border border-zinc-700/50"
+              className="w-7 h-7 rounded-full text-sm shadow-inner border border-zinc-700/50"
             />
+            <span className="text-xs font-bold text-white max-w-[72px] truncate">
+              {currentUser.name}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
           </button>
         </div>
       </div>

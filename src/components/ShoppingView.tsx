@@ -108,6 +108,14 @@ const ShoppingView = ({
     setItems(items.map((i) => (i.id === id ? { ...i, archived: isArchiving } : i)));
     if (isArchiving) {
       simulateNotifications('Item Comprado', `${currentUser.name} comprou "${name}".`, 'all', 'mercado', id);
+    } else {
+      simulateNotifications(
+        'De volta à lista',
+        `${currentUser.name} recolocou "${name}" na lista de compras.`,
+        'all',
+        'mercado',
+        id,
+      );
     }
   };
 
