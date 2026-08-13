@@ -4,7 +4,6 @@ import {
   BarChart3,
   Calendar as CalendarIcon,
   Check,
-  ChevronUp,
   CreditCard,
   Pencil,
   Plus,
@@ -97,8 +96,6 @@ const GastosView = ({
   // Exclusão com confirmação dentro do app (sem delay do diálogo do navegador)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const confirmTimerRef = useRef<number | undefined>(undefined);
-  // Gastos por mês: oculto no final da página (recolhido por padrão)
-  const [showMonths, setShowMonths] = useState(false);
 
   const emAberto = gastos.filter((g) => !g.quitado);
   const quitados = gastos.filter((g) => g.quitado);
@@ -418,52 +415,41 @@ const GastosView = ({
           ))}
         </div>
 
-        {/* Gastos por mês: oculto no final da página (recolhido por padrão) */}
+        {/* Gastos por mês: bem no final, sempre visível para consultar o que falta */}
         {monthStats.length > 0 && (
-          <div className="mt-8">
-            <button
-              onClick={() => setShowMonths((s) => !s)}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors text-sm font-medium"
-            >
-              {showMonths ? <ChevronUp className="w-4 h-4" /> : <BarChart3 className="w-4 h-4" />}
-              {showMonths ? 'Ocultar Gastos por Mês' : 'Ver Gastos por Mês'}
-            </button>
-            {showMonths && (
-              <div className="mt-4 bg-[#121214] border border-zinc-800 rounded-3xl p-4">
-                <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-emerald-500" /> Gastos por mês
-                </h3>
-                <p className="text-xs text-zinc-500 mb-4">
-                  Ao concluir as parcelas (ou marcar quitado), o valor abate do mês da compra.
-                </p>
-                <div className="space-y-3">
-                  {monthStats.map(({ mes, label, total, quitado, aberto, count }) => {
-                    const pct = total > 0 ? Math.round((quitado / total) * 100) : 0;
-                    return (
-                      <div key={mes.getTime()} className="rounded-2xl border border-zinc-800 p-3">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <span className="text-sm font-bold text-zinc-200 capitalize">{label}</span>
-                          <span className="text-sm font-bold text-white">R$ {total.toFixed(2)}</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-2">
-                          <div
-                            className="h-full bg-emerald-500 transition-all duration-500"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
-                          <span className="text-emerald-400">
-                            Quitado R$ {quitado.toFixed(2)}
-                            {count > 0 && ` • ${count} gasto${count > 1 ? 's' : ''}`}
-                          </span>
-                          <span className="text-zinc-500">Em aberto R$ {aberto.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+          <div className="mt-8 bg-[#121214] border border-zinc-800 rounded-3xl p-4">
+            <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-emerald-500" /> Gastos por mês
+            </h3>
+            <p className="text-xs text-zinc-500 mb-4">
+              O que falta pagar em cada mês — conclua as parcelas (ou marque quitado) para abater.
+            </p>
+            <div className="space-y-3">
+              {monthStats.map(({ mes, label, total, quitado, aberto, count }) => {
+                const pct = total > 0 ? Math.round((quitado / total) * 100) : 0;
+                return (
+                  <div key={mes.getTime()} className="rounded-2xl border border-zinc-800 p-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-sm font-bold text-zinc-200 capitalize">{label}</span>
+                      <span className="text-sm font-bold text-white">R$ {total.toFixed(2)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-2">
+                      <div
+                        className="h-full bg-emerald-500 transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+                      <span className="text-emerald-400">
+                        Quitado R$ {quitado.toFixed(2)}
+                        {count > 0 && ` • ${count} gasto${count > 1 ? 's' : ''}`}
+                      </span>
+                      <span className="text-zinc-500">Em aberto R$ {aberto.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
