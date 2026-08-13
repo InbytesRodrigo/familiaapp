@@ -53,7 +53,7 @@ npm run typecheck
 
 ### Mobile (estilo app nativo)
 - Barra de **navegação inferior** fixa (Agenda / Mercado / Configurações), como um app de celular.
-- Troca de usuário tocando no **avatar no topo** (abre um bottom sheet com foto, cor e papel de cada membro).
+- **Entrar como (sem senha)**: o topo mostra foto + nome de quem está usando; toque para abrir o bottom sheet e selecionar quem vai usar o app (apenas seleção, sem senha).
 - Suporte a telas com notch (safe-area) e botão flutuante posicionado acima da barra inferior.
 
 ### Mercado
@@ -63,7 +63,7 @@ npm run typecheck
 - Histórico de compras com opção de reativar itens.
 
 ### Configurações
-- **Família**: adicionar/remover/editar membros com nome, papel, **cor de identificação personalizada** e **foto de perfil** (upload de imagem, com fallback para emoji). A cor e a foto são refletidas em todo o app na hora.
+- **Família**: adicionar/remover/editar membros com nome, papel, **cor de identificação personalizada** e **foto de perfil** (upload de imagem com **ajuste manual — arraste para enquadrar e dê zoom antes de usar**, com botão "Ajustar foto" para refazer quando quiser; fallback para emoji). A cor e a foto são refletidas em todo o app na hora.
 - **Evolution API (WhatsApp)**: configure URL da API, instância, API Key e número de destino para enviar avisos reais.
 - **Push Notifications**: habilite alertas nativos com um toque ("Ativar push neste aparelho") — o app assina no servidor e salva no banco; cada mudança na agenda/mercado notifica todos os aparelhos, mesmo com o app fechado ou com o PWA instalado.
 - **Métodos de lembrete (admin)**: em Configurações → Push, configure **quando e quantas vezes** avisar (15 min, 1 h, 2 h, 6 h, 1 dia, 2 dias antes… cada linha = um aviso). Vale para todos os compromissos e itens do mercado com data — o servidor (cron a cada minuto) dispara o push no horário certo em qualquer aparelho.
