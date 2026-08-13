@@ -4,6 +4,7 @@ import {
   BarChart3,
   Calendar as CalendarIcon,
   Check,
+  ChevronUp,
   CreditCard,
   Pencil,
   Plus,
@@ -65,6 +66,8 @@ const buildGastoEvents = (gasto: Gasto, userId: string): FamilyEvent[] => {
 interface GastosViewProps {
   gastos: Gasto[];
   setGastos: React.Dispatch<React.SetStateAction<Gasto[]>>;
+  /** Compromissos (inclui as parcelas dos gastos) — usado para o progresso de pagamento. */
+  events: FamilyEvent[];
   currentUser: User;
   users: User[];
   simulateNotifications: Notify;
@@ -75,6 +78,7 @@ interface GastosViewProps {
 const GastosView = ({
   gastos,
   setGastos,
+  events,
   currentUser,
   users,
   simulateNotifications,
@@ -93,6 +97,8 @@ const GastosView = ({
   // Exclusão com confirmação dentro do app (sem delay do diálogo do navegador)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const confirmTimerRef = useRef<number | undefined>(undefined);
+  // Gastos por mês: oculto no final da página (recolhido por padrão)
+  const [showMonths, setShowMonths] = useState(false);
 
   const emAberto = gastos.filter((g) => !g.quitado);
   const quitados = gastos.filter((g) => g.quitado);
@@ -271,44 +277,6 @@ const GastosView = ({
           </div>
         </div>
 
-        {/* Gastos por mês: total com o quitado abatendo em tempo real */}
-        {monthStats.length > 0 && (
-          <div className="bg-[#121214] border border-zinc-800 rounded-3xl p-4 mb-6">
-            <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-emerald-500" /> Gastos por mês
-            </h3>
-            <p className="text-xs text-zinc-500 mb-4">
-              Ao marcar um gasto como quitado, ele abate do mês da compra.
-            </p>
-            <div className="space-y-3">
-              {monthStats.map(({ mes, label, total, quitado, aberto, count }) => {
-                const pct = total > 0 ? Math.round((quitado / total) * 100) : 0;
-                return (
-                  <div key={mes.getTime()} className="rounded-2xl border border-zinc-800 p-3">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-sm font-bold text-zinc-200 capitalize">{label}</span>
-                      <span className="text-sm font-bold text-white">R$ {total.toFixed(2)}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-2">
-                      <div
-                        className="h-full bg-emerald-500 transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
-                      <span className="text-emerald-400">
-                        Quitado R$ {quitado.toFixed(2)}
-                        {count > 0 && ` • ${count} gasto${count > 1 ? 's' : ''}`}
-                      </span>
-                      <span className="text-zinc-500">Em aberto R$ {aberto.toFixed(2)}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Lista */}
         <div className="space-y-3">
           {sorted.length === 0 && (
@@ -360,6 +328,40 @@ const GastosView = ({
                     </span>
                   )}
                 </div>
+                {/* Progresso de pagamento: cada parcela concluída no calendário abate */}
+                {!g.quitado && g.parcelas > 1 && (
+                  (() => {
+                    const pagas = events.filter((e) => e.gastoId === g.id && e.concluido).length;
+                    const vp = Number(valorParcela(g));
+                    const faltam = Math.max(0, g.parcelas - pagas);
+                    const pct = Math.round((pagas / g.parcelas) * 100);
+                    return (
+                      <div className="mt-2">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-[11px] font-bold text-emerald-400">
+                            {pagas > 0 ? `✓ ${pagas}/${g.parcelas} parcelas pagas` : `${pagas}/${g.parcelas} parcelas pagas`}
+                          </span>
+                          {pagas > 0 && (
+                            <span className="text-[11px] font-semibold text-zinc-400">
+                              Falta R$ {(faltam * vp).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          />
+                        </div>
+                        {pagas === 0 && (
+                          <p className="text-[10px] text-zinc-500 mt-1">
+                            Conclua as parcelas no calendário para abater aqui.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()
+                )}
                 <div className="flex items-center gap-1.5 mt-2 text-[11px] text-zinc-500">
                   <UserCircle2 className="w-3.5 h-3.5" />
                   <span>
@@ -415,6 +417,55 @@ const GastosView = ({
             </div>
           ))}
         </div>
+
+        {/* Gastos por mês: oculto no final da página (recolhido por padrão) */}
+        {monthStats.length > 0 && (
+          <div className="mt-8">
+            <button
+              onClick={() => setShowMonths((s) => !s)}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-colors text-sm font-medium"
+            >
+              {showMonths ? <ChevronUp className="w-4 h-4" /> : <BarChart3 className="w-4 h-4" />}
+              {showMonths ? 'Ocultar Gastos por Mês' : 'Ver Gastos por Mês'}
+            </button>
+            {showMonths && (
+              <div className="mt-4 bg-[#121214] border border-zinc-800 rounded-3xl p-4">
+                <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-emerald-500" /> Gastos por mês
+                </h3>
+                <p className="text-xs text-zinc-500 mb-4">
+                  Ao concluir as parcelas (ou marcar quitado), o valor abate do mês da compra.
+                </p>
+                <div className="space-y-3">
+                  {monthStats.map(({ mes, label, total, quitado, aberto, count }) => {
+                    const pct = total > 0 ? Math.round((quitado / total) * 100) : 0;
+                    return (
+                      <div key={mes.getTime()} className="rounded-2xl border border-zinc-800 p-3">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-sm font-bold text-zinc-200 capitalize">{label}</span>
+                          <span className="text-sm font-bold text-white">R$ {total.toFixed(2)}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-2">
+                          <div
+                            className="h-full bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+                          <span className="text-emerald-400">
+                            Quitado R$ {quitado.toFixed(2)}
+                            {count > 0 && ` • ${count} gasto${count > 1 ? 's' : ''}`}
+                          </span>
+                          <span className="text-zinc-500">Em aberto R$ {aberto.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Botão flutuante verde */}

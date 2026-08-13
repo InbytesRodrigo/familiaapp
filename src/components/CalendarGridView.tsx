@@ -399,8 +399,6 @@ const CalendarGridView = ({
                 .sort((a, b) => a.time.localeCompare(b.time))
                 .map((event) => {
                   const eventUser = users.find((u) => u.id === event.userId) || currentUser;
-                  // Parcelas de gasto são controladas pelo gasto (quitado) — sem botão de concluir
-                  const isParcela = Boolean(event.gastoId);
                   return (
                     <div
                       key={event.id}
@@ -449,23 +447,20 @@ const CalendarGridView = ({
                           )}
                         </div>
                       </div>
-                      {!isParcela && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleConcluido(event);
-                          }}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleConcluido(event);
+                        }}
                           title={event.concluido ? 'Desmarcar conclusão' : 'Marcar como concluído'}
                           className={`w-9 h-9 rounded-full border-2 flex items-center justify-center shrink-0 self-center transition-colors ${
                             event.concluido
                               ? 'bg-emerald-500 border-emerald-500 text-white'
                               : 'border-emerald-500 text-transparent hover:bg-emerald-500/10'
                           }`}
-                        >
-                          <Check className="w-5 h-5" />
+                        >                            <Check className="w-5 h-5" />
                         </button>
-                      )}
                       <Pencil className="w-4 h-4 text-zinc-600 group-hover:text-pink-400 self-center shrink-0" />
                     </div>
                   );

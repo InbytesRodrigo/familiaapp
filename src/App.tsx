@@ -589,6 +589,22 @@ const App = () => {
     if (removed.length > 0) void deleteGastos(removed);
   }, [gastos]);
 
+  // Gasto vira "quitado" automaticamente quando todas as parcelas são concluídas
+  // (as parcelas pagas saem do calendário, como no quitado manual)
+  useEffect(() => {
+    const fechados = gastos
+      .filter((g) => !g.quitado)
+      .filter((g) => {
+        const evs = events.filter((e) => e.gastoId === g.id);
+        return evs.length > 0 && evs.every((e) => e.concluido);
+      });
+    if (fechados.length === 0) return;
+    const ids = new Set(fechados.map((g) => g.id));
+    setGastos((prev) => prev.map((g) => (ids.has(g.id) ? { ...g, quitado: true } : g)));
+    setEvents((prev) => prev.filter((e) => !e.gastoId || !ids.has(e.gastoId)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
+
   // Setters usados pelas views (a sincronização acontece nos efeitos acima)
   const setEventsSynced: React.Dispatch<React.SetStateAction<FamilyEvent[]>> = (value) => setEvents(value);
   const setUsersSynced: React.Dispatch<React.SetStateAction<User[]>> = (value) => setUsers(value);
@@ -863,6 +879,7 @@ const App = () => {
           <GastosView
             gastos={gastos}
             setGastos={setGastosSynced}
+            events={events}
             currentUser={currentUser}
             users={users}
             simulateNotifications={simulatePushAndWhatsapp}
