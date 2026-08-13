@@ -18,6 +18,8 @@ export interface FamilyEvent {
   createdBy: string;
   /** "Alertar o parceiro": compromisso importante que notifica até ser visualizado. */
   alertar?: boolean;
+  /** Gasto compartilhado que gerou este compromisso (parcelas) — usado p/ sincronizar o calendário. */
+  gastoId?: string;
 }
 
 export interface ShoppingItem {
@@ -42,7 +44,7 @@ export interface Aviso {
   mensagem: string;
   deId: string;
   paraId: string; // 'all' ou id de um membro
-  tipo: 'evento' | 'mercado' | 'aviso' | 'presenca' | 'filho';
+  tipo: 'evento' | 'mercado' | 'aviso' | 'presenca' | 'filho' | 'gasto';
   refId?: string;
   lida: boolean;
   criadoEm: string; // ISO
@@ -61,6 +63,27 @@ export interface ChildCommitment {
   concluido: boolean;
   /** Data em que foi concluído (YYYY-MM-DD) — registrada ao marcar concluído. */
   dataConclusao?: string;
+}
+
+/** Gasto compartilhado: valor, parcelas, método e status quitado. */
+export interface Gasto {
+  id: string;
+  /** Nome do gasto/compromisso. */
+  titulo: string;
+  /** Valor total (R$). */
+  valor: number;
+  /** Data da compra (YYYY-MM-DD) — base das datas das parcelas. */
+  data: string;
+  /** Quantidade de parcelas (1 = à vista). */
+  parcelas: number;
+  /** Método de pagamento (Pix, Cartão...). */
+  metodo: string;
+  /** Observação/descrição (opcional). */
+  observacao?: string;
+  /** Quitado: todas as parcelas pagas. */
+  quitado: boolean;
+  /** Quem cadastrou. */
+  criadoPor?: string;
 }
 
 /** Método de lembrete do push: avisar X minutos antes do compromisso. */

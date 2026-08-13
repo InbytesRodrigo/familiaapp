@@ -1,6 +1,6 @@
 import { getSupabase } from './supabase';
 import { initialEvents, initialShoppingItems, initialUsers } from '../data/initialData';
-import type { Aviso, ChildCommitment, FamilyEvent, MetodoLembrete, ShoppingItem, User } from '../types';
+import type { Aviso, ChildCommitment, FamilyEvent, Gasto, MetodoLembrete, ShoppingItem, User } from '../types';
 
 const SEEDED_KEY = 'familiaapp:seeded';
 
@@ -40,6 +40,7 @@ const eventToDb = (e: FamilyEvent): Row => ({
   membro_id: e.userId,
   criado_por: e.createdBy,
   alertar: e.alertar ?? false,
+  gasto_id: e.gastoId ?? null,
 });
 
 const dbToEvent = (row: Row): FamilyEvent => {
@@ -54,6 +55,7 @@ const dbToEvent = (row: Row): FamilyEvent => {
     userId: String(row.membro_id ?? ''),
     createdBy: String(row.criado_por ?? ''),
     alertar: Boolean(row.alertar),
+    gastoId: row.gasto_id ? String(row.gasto_id) : undefined,
   };
 };
 
@@ -102,6 +104,32 @@ const dbToChild = (row: Row): ChildCommitment => ({
   alertar: Boolean(row.alertar),
 });
 
+// ——— Gastos compartilhados (valor, parcelas, método, quitado) ———
+
+const gastoToDb = (g: Gasto): Row => ({
+  id: g.id,
+  titulo: g.titulo,
+  valor: g.valor,
+  data: g.data,
+  parcelas: g.parcelas,
+  metodo: g.metodo,
+  observacao: g.observacao || null,
+  quitado: g.quitado,
+  criado_por: g.criadoPor ?? null,
+});
+
+const dbToGasto = (row: Row): Gasto => ({
+  id: String(row.id),
+  titulo: String(row.titulo ?? ''),
+  valor: Number(row.valor ?? 0),
+  data: String(row.data ?? ''),
+  parcelas: Number(row.parcelas ?? 1),
+  metodo: String(row.metodo ?? 'Pix'),
+  observacao: row.observacao ? String(row.observacao) : undefined,
+  quitado: Boolean(row.quitado),
+  criadoPor: row.criado_por ? String(row.criado_por) : undefined,
+});
+
 // ——— Carga inicial + seed dos dados demo ———
 
 export interface FamilyData {
@@ -109,6 +137,7 @@ export interface FamilyData {
   events: FamilyEvent[];
   items: ShoppingItem[];
   child: ChildCommitment[];
+  gastos: Gasto[];
 }
 
 /** Carrega tudo do Supabase; semeia os dados iniciais se o banco estiver vazio. Retorna null se não configurado. */
@@ -116,17 +145,19 @@ export const loadFromSupabase = async (): Promise<FamilyData | null> => {
   const supabase = getSupabase();
   if (!supabase) return null;
   try {
-    const [u, e, i, c] = await Promise.all([
+    const [u, e, i, c, g] = await Promise.all([
       supabase.from('familia').select('*').order('criado_em'),
       supabase.from('compromissos').select('*').order('data').order('hora'),
       supabase.from('mercado').select('*').order('criado_em'),
       supabase.from('compromissos_filho').select('*').order('criado_em'),
+      supabase.from('gastos').select('*').order('criado_em'),
     ]);
 
     const users = (u.data ?? []).map(dbToUser);
     const events = (e.data ?? []).map(dbToEvent);
     const items = (i.data ?? []).map(dbToItem);
     const child = (c.data ?? []).map(dbToChild);
+    const gastos = (g.data ?? []).map(dbToGasto);
 
     // Primeira vez: banco vazio -> semeia os dados de exemplo
     if (users.length === 0 && events.length === 0 && items.length === 0 && !localStorage.getItem(SEEDED_KEY)) {
@@ -134,7 +165,7 @@ export const loadFromSupabase = async (): Promise<FamilyData | null> => {
       if (seeded) return seeded;
     }
 
-    return { users, events, items, child };
+    return { users, events, items, child, gastos };
   } catch (err) {
     console.error('[Supabase] Falha ao carregar dados:', err);
     return null;
@@ -178,6 +209,7 @@ const seedInitialData = async (): Promise<FamilyData | null> => {
       events,
       items,
       child: [],
+      gastos: [],
     };
   } catch (err) {
     console.error('[Supabase] Falha ao semear dados iniciais:', err);
@@ -283,6 +315,40 @@ export const syncChildCommitments = async (child: ChildCommitment[]): Promise<bo
     return true;
   } catch (err) {
     console.error('[Supabase] Falha ao sincronizar compromissos do Filho:', err);
+    return false;
+  }
+};
+
+/** Envia todos os gastos compartilhados (upsert). Retorna true se gravou com sucesso. */
+export const syncGastos = async (gastos: Gasto[]): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from('gastos').upsert(gastos.map(gastoToDb));
+    if (error) {
+      console.error('[Supabase] Falha ao sincronizar gastos:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Falha ao sincronizar gastos:', err);
+    return false;
+  }
+};
+
+/** Remove gastos de verdade (para a exclusão não voltar ao recarregar). */
+export const deleteGastos = async (ids: string[]): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase || ids.length === 0) return true;
+  try {
+    const { error } = await supabase.from('gastos').delete().in('id', ids);
+    if (error) {
+      console.error('[Supabase] Falha ao excluir gastos:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[Supabase] Falha ao excluir gastos:', err);
     return false;
   }
 };

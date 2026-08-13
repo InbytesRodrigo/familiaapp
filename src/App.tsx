@@ -10,6 +10,7 @@ import {
   List,
   Settings,
   ShoppingCart,
+  Wallet,
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -22,6 +23,7 @@ import CalendarListView from './components/CalendarListView';
 import SettingsView from './components/SettingsView';
 import ShoppingView from './components/ShoppingView';
 import ChildCommitmentsView from './components/ChildCommitmentsView';
+import GastosView from './components/GastosView';
 import UserSwitcherSheet from './components/UserSwitcherSheet';
 import { initialEvents, initialShoppingItems, initialUsers } from './data/initialData';
 import type {
@@ -29,6 +31,7 @@ import type {
   ChildCommitment,
   EvolutionConfig,
   FamilyEvent,
+  Gasto,
   MetodoLembrete,
   ShoppingItem,
   Toast,
@@ -44,6 +47,7 @@ import {
 import {
   deleteChildCommitments,
   deleteEvents,
+  deleteGastos,
   deleteItems,
   deleteUsers,
   loadAvisos,
@@ -59,6 +63,7 @@ import {
   setPresenca,
   syncChildCommitments,
   syncEvents,
+  syncGastos,
   syncItems,
   syncUsers,
 } from './lib/db';
@@ -66,12 +71,13 @@ import { newId } from './lib/db';
 import type { FamilyData } from './lib/db';
 import { getSupabase as getSupabaseClient, isSupabaseConfigured } from './lib/supabase';
 
-type Tab = 'calendar' | 'shopping' | 'child' | 'settings';
+type Tab = 'calendar' | 'shopping' | 'child' | 'gastos' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: 'calendar', label: 'Agenda', icon: CalendarIcon },
   { id: 'shopping', label: 'Mercado', icon: ShoppingCart },
   { id: 'child', label: 'Filho', icon: Baby },
+  { id: 'gastos', label: 'Gastos', icon: Wallet },
   { id: 'settings', label: 'Configurações', icon: Settings },
 ];
 
@@ -128,12 +134,14 @@ const App = () => {
   const [events, setEvents] = useState<FamilyEvent[]>(() => (isSupabaseConfigured() ? [] : initialEvents));
   const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(() => (isSupabaseConfigured() ? [] : initialShoppingItems));
   const [childCommitments, setChildCommitments] = useState<ChildCommitment[]>([]);
+  const [gastos, setGastos] = useState<Gasto[]>([]);
 
   // Espelhos do estado (para usar em callbacks sem closures antigos)
   const eventsRef = useRef(events);
   const usersRef = useRef(users);
   const itemsRef = useRef(shoppingItems);
   const childRef = useRef(childCommitments);
+  const gastosRef = useRef(gastos);
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);
@@ -146,6 +154,9 @@ const App = () => {
   useEffect(() => {
     childRef.current = childCommitments;
   }, [childCommitments]);
+  useEffect(() => {
+    gastosRef.current = gastos;
+  }, [gastos]);
 
   // Métodos de lembrete ("quantas vezes / quanto tempo antes"): salvos no
   // navegador E no banco — o cron do servidor usa a mesma configuração.
@@ -447,6 +458,7 @@ const App = () => {
   const lastUsersRef = useRef<User[]>(isSupabaseConfigured() ? [] : initialUsers);
   const lastItemsRef = useRef<ShoppingItem[]>(isSupabaseConfigured() ? [] : initialShoppingItems);
   const lastChildRef = useRef<ChildCommitment[]>([]);
+  const lastGastosRef = useRef<Gasto[]>([]);
 
   // Aplica os dados vindos do servidor sem apagar mudanças locais ainda não sincronizadas
   const applyServerData = (data: FamilyData) => {
@@ -454,16 +466,19 @@ const App = () => {
       lastEventsRef.current !== eventsRef.current ||
       lastUsersRef.current !== usersRef.current ||
       lastItemsRef.current !== itemsRef.current ||
-      lastChildRef.current !== childRef.current;
+      lastChildRef.current !== childRef.current ||
+      lastGastosRef.current !== gastosRef.current;
     if (hasLocalPending) return;
     lastEventsRef.current = data.events;
     lastUsersRef.current = data.users;
     lastItemsRef.current = data.items;
     lastChildRef.current = data.child;
+    lastGastosRef.current = data.gastos;
     setEvents(data.events);
     setUsers(data.users);
     setShoppingItems(data.items);
     setChildCommitments(data.child);
+    setGastos(data.gastos);
     setCurrentUserId((cur) => (data.users.some((u) => u.id === cur) ? cur : data.users[0]?.id ?? cur));
     setConnectionState('connected');
   };
@@ -561,12 +576,31 @@ const App = () => {
     if (removed.length > 0) void deleteChildCommitments(removed);
   }, [childCommitments]);
 
+  useEffect(() => {
+    const prev = lastGastosRef.current;
+    if (prev === gastos) return;
+    lastGastosRef.current = gastos;
+    const removed = prev.filter((g) => !gastos.some((n) => n.id === g.id)).map((g) => g.id);
+    void syncGastos(gastos).then((ok) => {
+      if (!ok && isSupabaseConfigured()) {
+        showNotification('Erro ao salvar', 'Não foi possível salvar os gastos. Verifique a conexão.', 'error');
+      }
+    });
+    if (removed.length > 0) void deleteGastos(removed);
+  }, [gastos]);
+
   // Setters usados pelas views (a sincronização acontece nos efeitos acima)
   const setEventsSynced: React.Dispatch<React.SetStateAction<FamilyEvent[]>> = (value) => setEvents(value);
   const setUsersSynced: React.Dispatch<React.SetStateAction<User[]>> = (value) => setUsers(value);
   const setShoppingItemsSynced: React.Dispatch<React.SetStateAction<ShoppingItem[]>> = (value) => setShoppingItems(value);
   const setChildCommitmentsSynced: React.Dispatch<React.SetStateAction<ChildCommitment[]>> = (value) =>
     setChildCommitments(value);
+  const setGastosSynced: React.Dispatch<React.SetStateAction<Gasto[]>> = (value) => setGastos(value);
+
+  // Gastos → calendário: substitui os compromissos de parcela de um gasto pelos novos
+  const syncGastoEvents = (gastoId: string, eventos: FamilyEvent[]) => {
+    setEvents((prev) => [...prev.filter((e) => e.gastoId !== gastoId), ...eventos]);
+  };
 
   const showNotification = (title: string, message: string, type: ToastType = 'info') => {
     const id = Date.now();
@@ -823,6 +857,15 @@ const App = () => {
             currentUser={currentUser}
             simulateNotifications={simulatePushAndWhatsapp}
             onVisualizarCompromisso={visualizarCompromisso}
+          />
+        )}
+        {activeTab === 'gastos' && (
+          <GastosView
+            gastos={gastos}
+            setGastos={setGastosSynced}
+            currentUser={currentUser}
+            simulateNotifications={simulatePushAndWhatsapp}
+            onSyncCalendarEvents={syncGastoEvents}
           />
         )}
         {activeTab === 'settings' && (

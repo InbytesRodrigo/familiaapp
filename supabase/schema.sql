@@ -24,8 +24,10 @@ create table if not exists public.compromissos (
   membro_id uuid references public.familia(id) on delete cascade,
   criado_por uuid references public.familia(id) on delete set null,
   criado_em timestamptz not null default now(),
-  alertar boolean not null default false -- "Alertar o parceiro": notifica até visualizar
+  alertar boolean not null default false, -- "Alertar o parceiro": notifica até visualizar
+  gasto_id uuid          -- parcela de gasto compartilhado (compromisso automático)
 );
+create index if not exists idx_compromissos_gasto on public.compromissos (gasto_id);
 
 -- Lista de mercado
 create table if not exists public.mercado (
@@ -54,6 +56,20 @@ create table if not exists public.compromissos_filho (
   concluido boolean not null default false,
   data_conclusao date,
   alertar boolean not null default false,
+  criado_em timestamptz not null default now()
+);
+
+-- Gastos compartilhados (valor, parcelas, método e status quitado)
+create table if not exists public.gastos (
+  id uuid primary key default gen_random_uuid(),
+  titulo text not null,
+  valor numeric(12,2) not null default 0,
+  data date not null,             -- data da compra (base das datas das parcelas)
+  parcelas integer not null default 1,  -- 1 = à vista
+  metodo text not null default 'Pix',
+  observacao text,                -- descrição/observação
+  quitado boolean not null default false,
+  criado_por uuid references public.familia(id) on delete set null,
   criado_em timestamptz not null default now()
 );
 
