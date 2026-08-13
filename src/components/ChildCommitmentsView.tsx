@@ -80,8 +80,10 @@ const ChildCommitmentsView = ({
     const alertar = fd.get('alertar') === 'on';
     if (!title) return;
 
+    const descricao = String(fd.get('descricao') ?? '').trim() || undefined;
+
     if (editing) {
-      setCommitments((prev) => prev.map((c) => (c.id === editing.id ? { ...c, title, date, alertar } : c)));
+      setCommitments((prev) => prev.map((c) => (c.id === editing.id ? { ...c, title, descricao, date, alertar } : c)));
       simulateNotifications(
         alertar ? '⚠️ Compromisso do Filho' : 'Compromisso do Filho Atualizado',
         `${currentUser.name} atualizou "${title}".${alertar ? ' ⚠️ Importante — abra para visualizar.' : ''}`,
@@ -93,6 +95,7 @@ const ChildCommitmentsView = ({
       const novo: ChildCommitment = {
         id: newId(),
         title,
+        descricao,
         date,
         alertar,
         concluido: false,
@@ -213,6 +216,11 @@ const ChildCommitmentsView = ({
                 <p className={`font-bold ${c.concluido ? 'line-through text-zinc-500' : 'text-white'}`}>
                   {c.title}
                 </p>
+                {c.descricao && (
+                  <p className="text-sm text-zinc-400 leading-snug mt-1 line-clamp-2 whitespace-pre-line">
+                    {c.descricao}
+                  </p>
+                )}
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   {c.date && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full border border-orange-500/30 bg-orange-500/10 text-orange-400 font-bold flex items-center gap-1">
@@ -318,6 +326,18 @@ const ChildCommitmentsView = ({
                 defaultValue={editing?.title ?? ''}
                 autoFocus
                 className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all placeholder-zinc-700"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+                Descrição <span className="text-zinc-600">(opcional)</span>
+              </label>
+              <textarea
+                name="descricao"
+                rows={3}
+                placeholder="Ex.: o que estudar, material que precisa levar..."
+                defaultValue={editing?.descricao ?? ''}
+                className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all placeholder-zinc-700 text-sm resize-none"
               />
             </div>
             <div>

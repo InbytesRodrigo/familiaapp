@@ -9,6 +9,8 @@ export interface User {
 export interface FamilyEvent {
   id: string;
   title: string;
+  /** Descrição/explicações do compromisso (opcional). */
+  descricao?: string;
   date: Date;
   time: string;
   endTime?: string;
@@ -50,6 +52,8 @@ export interface Aviso {
 export interface ChildCommitment {
   id: string;
   title: string;
+  /** Descrição/explicações do compromisso (opcional). */
+  descricao?: string;
   /** Data do compromisso (YYYY-MM-DD) — opcional. */
   date?: string;
   /** Alerta o parceiro até visualizar (importante). */

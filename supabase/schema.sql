@@ -17,6 +17,7 @@ create table if not exists public.familia (
 create table if not exists public.compromissos (
   id uuid primary key default gen_random_uuid(),
   titulo text not null,
+  descricao text,        -- explicações adicionais do compromisso
   data date not null,
   hora time not null,
   hora_fim time,
@@ -48,6 +49,7 @@ create index if not exists idx_mercado_comprado on public.mercado (comprado);
 create table if not exists public.compromissos_filho (
   id uuid primary key default gen_random_uuid(),
   titulo text not null,
+  descricao text,        -- explicações adicionais do compromisso
   data_compromisso date,
   concluido boolean not null default false,
   data_conclusao date,

@@ -33,6 +33,7 @@ const localDate = (d: Date): string =>
 const eventToDb = (e: FamilyEvent): Row => ({
   id: e.id,
   titulo: e.title,
+  descricao: e.descricao || null,
   data: localDate(e.date),
   hora: e.time,
   hora_fim: e.endTime ?? null,
@@ -46,6 +47,7 @@ const dbToEvent = (row: Row): FamilyEvent => {
   return {
     id: String(row.id),
     title: String(row.titulo ?? ''),
+    descricao: row.descricao ? String(row.descricao) : undefined,
     date: new Date(y || 2000, (m || 1) - 1, d || 1),
     time: String(row.hora ?? '').slice(0, 5),
     endTime: row.hora_fim ? String(row.hora_fim).slice(0, 5) : undefined,
@@ -83,6 +85,7 @@ const dbToItem = (row: Row): ShoppingItem => ({
 const childToDb = (c: ChildCommitment): Row => ({
   id: c.id,
   titulo: c.title,
+  descricao: c.descricao || null,
   data_compromisso: c.date ?? null,
   concluido: c.concluido,
   data_conclusao: c.dataConclusao ?? null,
@@ -92,6 +95,7 @@ const childToDb = (c: ChildCommitment): Row => ({
 const dbToChild = (row: Row): ChildCommitment => ({
   id: String(row.id),
   title: String(row.titulo ?? ''),
+  descricao: row.descricao ? String(row.descricao) : undefined,
   date: row.data_compromisso ? String(row.data_compromisso) : undefined,
   concluido: Boolean(row.concluido),
   dataConclusao: row.data_conclusao ? String(row.data_conclusao) : undefined,

@@ -122,6 +122,7 @@ const CalendarGridView = ({
 
     const data = {
       title: String(formData.get('title') ?? ''),
+      descricao: String(formData.get('descricao') ?? '').trim() || undefined,
       date: eventDate,
       time: String(formData.get('time') ?? ''),
       endTime: String(formData.get('endTime') ?? '') || undefined,
@@ -385,6 +386,11 @@ const CalendarGridView = ({
                       />
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-white md:text-lg">{event.title}</p>
+                        {event.descricao && (
+                          <p className="text-zinc-400 text-xs md:text-sm leading-snug mt-1 line-clamp-2 whitespace-pre-line">
+                            {event.descricao}
+                          </p>
+                        )}
                         <div className="flex flex-wrap items-center gap-2 mt-1">
                           <span className="text-zinc-400 text-xs md:text-sm">
                             {event.time} {event.endTime ? `→ ${event.endTime}` : ''}
@@ -456,6 +462,18 @@ const CalendarGridView = ({
                 defaultValue={editingEvent?.title ?? ''}
                 autoFocus
                 className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all placeholder-zinc-700"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+                Descrição <span className="text-zinc-600">(opcional)</span>
+              </label>
+              <textarea
+                name="descricao"
+                rows={3}
+                placeholder="Ex.: levar documento, valor a pagar, o que preparar..."
+                defaultValue={editingEvent?.descricao ?? ''}
+                className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all placeholder-zinc-700 text-sm resize-none"
               />
             </div>
             <div>
