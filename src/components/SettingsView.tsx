@@ -35,6 +35,8 @@ interface SettingsViewProps {
   setPushGranted: React.Dispatch<React.SetStateAction<boolean>>;
   metodosLembrete: MetodoLembrete[];
   setMetodosLembrete: (metodos: MetodoLembrete[]) => void;
+  /** Quem está online agora (id -> true). */
+  presence: Record<string, boolean>;
   showNotification: (title: string, message: string, type?: ToastType) => void;
   logoVariant: LogoVariant;
   setLogoVariant: (value: LogoVariant) => void;
@@ -52,6 +54,7 @@ const SettingsView = ({
   setPushGranted,
   metodosLembrete,
   setMetodosLembrete,
+  presence,
   showNotification,
   logoVariant,
   setLogoVariant,
@@ -339,12 +342,22 @@ const SettingsView = ({
                 className="bg-[#121214] border border-zinc-800 p-4 rounded-2xl flex items-center justify-between group"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <Avatar
-                    user={user}
-                    className="w-12 h-12 rounded-full text-2xl shadow-inner border border-zinc-700/50 shrink-0"
-                  />
+                  <span className="relative shrink-0">
+                    <Avatar
+                      user={user}
+                      className="w-12 h-12 rounded-full text-2xl shadow-inner border border-zinc-700/50 shrink-0"
+                    />
+                    {presence[user.id] && (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#121214]" />
+                    )}
+                  </span>
                   <div className="min-w-0">
-                    <p className="font-bold text-white truncate">{user.name}</p>
+                    <p className="font-bold text-white truncate flex items-center gap-2">
+                      {user.name}
+                      {presence[user.id] && (
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400">online</span>
+                      )}
+                    </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-zinc-500 truncate">{user.role}</span>
                       <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: user.color }}></div>

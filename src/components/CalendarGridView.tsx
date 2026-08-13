@@ -13,6 +13,8 @@ interface CalendarGridViewProps {
   users: User[];
   currentUser: User;
   simulateNotifications: Notify;
+  /** Chamado quando o parceiro abre o compromisso (marca os avisos como lidos). */
+  onVisualizarCompromisso: (eventId: string) => void;
 }
 
 const CalendarGridView = ({
@@ -21,6 +23,7 @@ const CalendarGridView = ({
   users,
   currentUser,
   simulateNotifications,
+  onVisualizarCompromisso,
 }: CalendarGridViewProps) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -100,6 +103,8 @@ const CalendarGridView = ({
   };
 
   const openEditModal = (event: FamilyEvent) => {
+    // Parceiro visualizou o compromisso → avisos ficam lidos e param de notificar
+    if (event.alertar) onVisualizarCompromisso(event.id);
     setEditingEvent(event);
     setIsEventModalOpen(true);
   };
@@ -121,14 +126,15 @@ const CalendarGridView = ({
       time: String(formData.get('time') ?? ''),
       endTime: String(formData.get('endTime') ?? '') || undefined,
       userId: String(formData.get('userId') ?? ''),
+      alertar: formData.get('alertar') === 'on',
     };
     const notifyParaId = String(formData.get('notifyParaId') ?? 'all');
 
     if (editingEvent) {
       setEvents((prev) => prev.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data } : ev)));
       simulateNotifications(
-        'Compromisso Atualizado',
-        `${currentUser.name} atualizou "${data.title}".`,
+        data.alertar ? '⚠️ Compromisso Importante' : 'Compromisso Atualizado',
+        `${currentUser.name} atualizou "${data.title}".${data.alertar ? ' ⚠️ Importante — abra para visualizar.' : ''}`,
         notifyParaId,
         'evento',
         editingEvent.id,
@@ -137,8 +143,8 @@ const CalendarGridView = ({
       const newEvent: FamilyEvent = { id: newId(), ...data, createdBy: currentUser.id };
       setEvents((prev) => [...prev, newEvent]);
       simulateNotifications(
-        'Novo Compromisso',
-        `${currentUser.name} marcou "${newEvent.title}".`,
+        newEvent.alertar ? '⚠️ Compromisso Importante' : 'Novo Compromisso',
+        `${currentUser.name} marcou "${newEvent.title}".${newEvent.alertar ? ' ⚠️ Importante — abra para visualizar.' : ''}`,
         notifyParaId,
         'evento',
         newEvent.id,
@@ -501,6 +507,21 @@ const CalendarGridView = ({
                 ))}
               </select>
             </div>
+            {/* Alertar o parceiro: importante → notifica até visualizar */}
+            <label className="flex items-start gap-3 p-3 bg-[#09090b] border border-zinc-800 rounded-xl cursor-pointer">
+              <input
+                type="checkbox"
+                name="alertar"
+                defaultChecked={editingEvent?.alertar ?? false}
+                className="w-4 h-4 mt-0.5 accent-pink-500"
+              />
+              <span className="text-sm text-zinc-300">
+                <span className="font-bold text-white">Alertar o parceiro</span>
+                <span className="block text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                  Importante: fica notificando até a pessoa visualizar o compromisso.
+                </span>
+              </span>
+            </label>
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1.5">
                 Notificar <span className="text-zinc-600">(quem recebe o aviso)</span>

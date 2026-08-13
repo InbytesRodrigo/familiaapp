@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Archive, Calendar as CalendarIcon, Check, DollarSign, Plus, ShoppingCart } from 'lucide-react';
+import { Archive, Calendar as CalendarIcon, Check, DollarSign, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import { newId } from '../lib/db';
@@ -39,6 +39,7 @@ const ShoppingView = ({
   const [newItemDate, setNewItemDate] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null);
 
   const activeItems = items.filter((i) => !i.archived);
   const archivedItems = items.filter((i) => i.archived);
@@ -46,13 +47,75 @@ const ShoppingView = ({
   const totalActive = activeItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const totalArchived = archivedItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
 
-  const handleAddItem = (e: FormEvent<HTMLFormElement>) => {
+  const resetForm = () => {
+    setNewItemName('');
+    setNewItemQuantity(1);
+    setNewItemPrice('');
+    setNewItemDate('');
+    setEditingItem(null);
+    setIsFormOpen(false);
+  };
+
+  const openAddItem = () => {
+    resetForm();
+    setIsFormOpen(true);
+  };
+
+  const openEditItem = (item: ShoppingItem) => {
+    setEditingItem(item);
+    setNewItemName(item.name);
+    setNewItemQuantity(item.quantity);
+    setNewItemPrice(item.price ? String(item.price) : '');
+    setNewItemDate(item.date ?? '');
+    setIsFormOpen(true);
+  };
+
+  const handleDeleteItem = (item: ShoppingItem) => {
+    if (!window.confirm(`Excluir "${item.name}" da lista de mercado?`)) return;
+    setItems(items.filter((i) => i.id !== item.id));
+    simulateNotifications(
+      'Item Removido',
+      `${currentUser.name} removeu "${item.name}" do mercado.`,
+      'all',
+      'mercado',
+      item.id,
+    );
+  };
+
+  const handleSubmitItem = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!newItemName.trim()) return;
+    const name = newItemName.trim();
+    if (!name) return;
+
+    // Edição de item existente
+    if (editingItem) {
+      setItems(
+        items.map((i) =>
+          i.id === editingItem.id
+            ? {
+                ...i,
+                name,
+                quantity: newItemQuantity,
+                price: parseFloat(newItemPrice) || i.price,
+                date: newItemDate || undefined,
+              }
+            : i,
+        ),
+      );
+      simulateNotifications(
+        'Mercado Atualizado',
+        `${currentUser.name} editou "${name}".`,
+        'all',
+        'mercado',
+        editingItem.id,
+      );
+      resetForm();
+      return;
+    }
 
     // Reativa o item se ele já existir no histórico
     const existingArchived = items.find(
-      (i) => i.name.toLowerCase() === newItemName.trim().toLowerCase() && i.archived,
+      (i) => i.name.toLowerCase() === name.toLowerCase() && i.archived,
     );
 
     if (existingArchived) {
@@ -80,7 +143,7 @@ const ShoppingView = ({
     } else {
       const newItem: ShoppingItem = {
         id: newId(),
-        name: newItemName.trim(),
+        name,
         quantity: newItemQuantity,
         price: parseFloat(newItemPrice) || 0,
         archived: false,
@@ -97,11 +160,7 @@ const ShoppingView = ({
       );
     }
 
-    setNewItemName('');
-    setNewItemQuantity(1);
-    setNewItemPrice('');
-    setNewItemDate('');
-    setIsFormOpen(false);
+    resetForm();
   };
 
   const toggleArchive = (id: string, name: string, isArchiving: boolean) => {
@@ -188,8 +247,24 @@ const ShoppingView = ({
                     </div>
                   </div>
                 </div>
-                <div className="font-bold text-white shrink-0">
-                  R$ {(item.price * item.quantity).toFixed(2)}
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="font-bold text-white mr-2">
+                    R$ {(item.price * item.quantity).toFixed(2)}
+                  </span>
+                  <button
+                    onClick={() => openEditItem(item)}
+                    className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                    title="Editar item"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteItem(item)}
+                    className="p-2 text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                    title="Excluir item"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             );
@@ -227,8 +302,17 @@ const ShoppingView = ({
                       </span>
                     </div>
                   </div>
-                  <div className="font-bold text-zinc-500 line-through">
-                    R$ {(item.price * item.quantity).toFixed(2)}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="font-bold text-zinc-500 line-through mr-2">
+                      R$ {(item.price * item.quantity).toFixed(2)}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteItem(item)}
+                      className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                      title="Excluir do histórico"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -239,22 +323,22 @@ const ShoppingView = ({
 
       {/* Botão flutuante (FAB) */}
       <button
-        onClick={() => setIsFormOpen(true)}
+        onClick={openAddItem}
         className="absolute bottom-24 md:bottom-8 right-8 w-16 h-16 bg-pink-500 hover:bg-pink-400 text-white rounded-full shadow-[0_0_20px_rgba(236,72,153,0.4)] flex items-center justify-center transition-transform hover:scale-105 z-10"
       >
         <Plus className="w-8 h-8" />
       </button>
 
-      {/* Modal de novo item */}
+      {/* Modal de novo/editar item */}
       {isFormOpen && (
         <Modal
-          onClose={() => setIsFormOpen(false)}
-          title="Novo Item"
+          onClose={resetForm}
+          title={editingItem ? 'Editar Item' : 'Novo Item'}
           footer={
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setIsFormOpen(false)}
+                onClick={resetForm}
                 className="flex-1 px-4 py-3 border border-zinc-700 text-zinc-300 rounded-xl hover:bg-zinc-800 transition-colors"
               >
                 Cancelar
@@ -264,12 +348,12 @@ const ShoppingView = ({
                 form="shopping-item-form"
                 className="flex-1 px-4 py-3 bg-pink-500 text-white font-medium rounded-xl hover:bg-pink-400 transition-colors"
               >
-                Adicionar
+                {editingItem ? 'Salvar' : 'Adicionar'}
               </button>
             </div>
           }
         >
-          <form id="shopping-item-form" onSubmit={handleAddItem} className="space-y-5">
+          <form id="shopping-item-form" onSubmit={handleSubmitItem} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1.5">Produto</label>
               <input

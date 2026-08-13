@@ -38,6 +38,7 @@ const eventToDb = (e: FamilyEvent): Row => ({
   hora_fim: e.endTime ?? null,
   membro_id: e.userId,
   criado_por: e.createdBy,
+  alertar: e.alertar ?? false,
 });
 
 const dbToEvent = (row: Row): FamilyEvent => {
@@ -50,6 +51,7 @@ const dbToEvent = (row: Row): FamilyEvent => {
     endTime: row.hora_fim ? String(row.hora_fim).slice(0, 5) : undefined,
     userId: String(row.membro_id ?? ''),
     createdBy: String(row.criado_por ?? ''),
+    alertar: Boolean(row.alertar),
   };
 };
 
@@ -316,6 +318,17 @@ export const markAvisoLida = async (id: string): Promise<void> => {
   }
 };
 
+/** Marca como lidos os avisos de um compromisso (parceiro visualizou → para de notificar). */
+export const markAvisosPorRef = async (refId: string): Promise<void> => {
+  const supabase = getSupabase();
+  if (!supabase || !refId) return;
+  try {
+    await supabase.from('avisos').update({ lida: true }).eq('ref_id', refId).eq('lida', false);
+  } catch (err) {
+    console.error('[Supabase] Falha ao marcar avisos do compromisso como lidos:', err);
+  }
+};
+
 /** Marca todos os avisos como lidos. */
 export const markAllAvisosLidas = async (): Promise<void> => {
   const supabase = getSupabase();
@@ -363,6 +376,53 @@ export const loadMetodosLembrete = async (): Promise<MetodoLembrete[]> => {
       .map((m) => ({ id: crypto.randomUUID(), minutosAntes: m.minutosAntes as number }));
   } catch {
     return [];
+  }
+};
+
+// ——— Presença online/offline (quem está com o app aberto agora) ———
+
+/**
+ * Marca a presença de um membro (online/offline) com heartbeat.
+ * A tabela presenca tem 1 linha por membro; atualizado_em é o "último sinal de vida".
+ */
+export const setPresenca = async (userId: string, online: boolean): Promise<void> => {
+  const supabase = getSupabase();
+  if (!supabase || !userId) return;
+  try {
+    await supabase
+      .from('presenca')
+      .upsert(
+        { membro_id: userId, online, atualizado_em: new Date().toISOString() },
+        { onConflict: 'membro_id' },
+      );
+  } catch (err) {
+    console.error('[Supabase] Falha ao atualizar presença:', err);
+  }
+};
+
+/**
+ * Lê quem está online agora (membro_id -> online).
+ * Um membro só é considerado online se o último heartbeat foi recente.
+ */
+export const loadPresenca = async (): Promise<Record<string, boolean>> => {
+  const supabase = getSupabase();
+  if (!supabase) return {};
+  try {
+    const { data, error } = await supabase.from('presenca').select('membro_id, online, atualizado_em');
+    if (error) {
+      console.error('[Supabase] Falha ao carregar presença:', error.message);
+      return {};
+    }
+    const cutoff = Date.now() - 90_000; // último sinal há menos de 90s
+    const map: Record<string, boolean> = {};
+    for (const row of data ?? []) {
+      const updated = new Date(String(row.atualizado_em ?? '')).getTime();
+      map[String(row.membro_id)] = Boolean(row.online) && !Number.isNaN(updated) && updated >= cutoff;
+    }
+    return map;
+  } catch (err) {
+    console.error('[Supabase] Falha ao carregar presença:', err);
+    return {};
   }
 };
 

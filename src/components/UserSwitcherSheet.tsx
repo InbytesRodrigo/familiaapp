@@ -5,6 +5,8 @@ import type { User } from '../types';
 interface UserSwitcherSheetProps {
   users: User[];
   currentUser: User;
+  /** Quem está online agora (id -> true). */
+  presence: Record<string, boolean>;
   onSelect: (id: string) => void;
   onManageProfiles: () => void;
   onClose: () => void;
@@ -14,6 +16,7 @@ interface UserSwitcherSheetProps {
 const UserSwitcherSheet = ({
   users,
   currentUser,
+  presence,
   onSelect,
   onManageProfiles,
   onClose,
@@ -33,9 +36,19 @@ const UserSwitcherSheet = ({
             onClick={() => onSelect(u.id)}
             className="w-full flex items-center gap-3 p-3 rounded-2xl bg-[#09090b] border border-zinc-800 text-left hover:border-zinc-600 transition-colors"
           >
-            <Avatar user={u} className="w-10 h-10 rounded-full text-lg shrink-0" />
+            <span className="relative shrink-0">
+              <Avatar user={u} className="w-10 h-10 rounded-full text-lg shrink-0" />
+              {presence[u.id] && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#121214]" />
+              )}
+            </span>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-white truncate">{u.name}</p>
+              <p className="font-bold text-white truncate flex items-center gap-2">
+                {u.name}
+                {presence[u.id] && (
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-400">online</span>
+                )}
+              </p>
               <p className="text-xs text-zinc-500">{u.role}</p>
             </div>
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: u.color }} />

@@ -14,6 +14,8 @@ export interface FamilyEvent {
   endTime?: string;
   userId: string;
   createdBy: string;
+  /** "Alertar o parceiro": compromisso importante que notifica até ser visualizado. */
+  alertar?: boolean;
 }
 
 export interface ShoppingItem {
@@ -34,7 +36,7 @@ export interface Aviso {
   mensagem: string;
   deId: string;
   paraId: string; // 'all' ou id de um membro
-  tipo: 'evento' | 'mercado' | 'aviso';
+  tipo: 'evento' | 'mercado' | 'aviso' | 'presenca';
   refId?: string;
   lida: boolean;
   criadoEm: string; // ISO

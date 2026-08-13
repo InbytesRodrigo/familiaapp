@@ -3,7 +3,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import Avatar from './Avatar';
-import { isToday, toDateInput } from '../utils';
+import { capitalize, isToday, toDateInput } from '../utils';
 import { newId } from '../lib/db';
 import type { FamilyEvent, Notify, User } from '../types';
 
@@ -13,6 +13,8 @@ interface CalendarListViewProps {
   users: User[];
   currentUser: User;
   simulateNotifications: Notify;
+  /** Chamado quando o parceiro abre o compromisso (marca os avisos como lidos). */
+  onVisualizarCompromisso: (eventId: string) => void;
 }
 
 const CalendarListView = ({
@@ -21,6 +23,7 @@ const CalendarListView = ({
   users,
   currentUser,
   simulateNotifications,
+  onVisualizarCompromisso,
 }: CalendarListViewProps) => {
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<FamilyEvent | null>(null);
@@ -42,6 +45,7 @@ const CalendarListView = ({
       time: String(formData.get('time') ?? ''),
       endTime: String(formData.get('endTime') ?? '') || undefined,
       userId: String(formData.get('userId') ?? ''),
+      alertar: formData.get('alertar') === 'on',
     };
 
     const notifyParaId = String(formData.get('notifyParaId') ?? 'all');
@@ -49,8 +53,8 @@ const CalendarListView = ({
     if (editingEvent) {
       setEvents((prev) => prev.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data } : ev)));
       simulateNotifications(
-        'Compromisso Atualizado',
-        `${currentUser.name} atualizou "${data.title}".`,
+        data.alertar ? '⚠️ Compromisso Importante' : 'Compromisso Atualizado',
+        `${currentUser.name} atualizou "${data.title}".${data.alertar ? ' ⚠️ Importante — abra para visualizar.' : ''}`,
         notifyParaId,
         'evento',
         editingEvent.id,
@@ -59,8 +63,8 @@ const CalendarListView = ({
       const newEvent: FamilyEvent = { id: newId(), ...data, createdBy: currentUser.id };
       setEvents((prev) => [...prev, newEvent]);
       simulateNotifications(
-        'Novo Compromisso',
-        `${currentUser.name} marcou "${newEvent.title}".`,
+        newEvent.alertar ? '⚠️ Compromisso Importante' : 'Novo Compromisso',
+        `${currentUser.name} marcou "${newEvent.title}".${newEvent.alertar ? ' ⚠️ Importante — abra para visualizar.' : ''}`,
         notifyParaId,
         'evento',
         newEvent.id,
@@ -87,6 +91,8 @@ const CalendarListView = ({
   };
 
   const openEventModal = (event: FamilyEvent | null) => {
+    // Parceiro visualizou o compromisso → avisos ficam lidos e param de notificar
+    if (event?.alertar) onVisualizarCompromisso(event.id);
     setEditingEvent(event);
     setIsEventModalOpen(true);
   };
@@ -108,46 +114,40 @@ const CalendarListView = ({
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar bg-black text-white relative">
       <div className="max-w-3xl mx-auto p-4 md:p-8 pb-32">
-        {/* Legenda de membros: foto de perfil de cada familiar, estilo rede social */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-8">
-          {users.map((u) => (
-            <span
-              key={u.id}
-              className="flex items-center gap-2 text-xs font-semibold"
-              style={{ color: u.color }}
-            >
-              <Avatar
-                user={u}
-                className="w-6 h-6 rounded-full text-xs shrink-0"
-                style={{ boxShadow: `0 0 0 2px ${u.color}` }}
-              />
-              {u.name}
-            </span>
-          ))}
-        </div>
-
         {sortedDates.map((group, index) => {
           const groupIsToday = isToday(group.date);
           const dayNumber = group.date.getDate();
-          const dayName = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' }).format(group.date);
+          // Dia da semana abreviado: SEG, TER, QUA... (cor da pessoa que está vendo)
+          const dayShort = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][group.date.getDay()];
           const monthYear = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(group.date);
+          const viewColor = currentUser.color;
 
           return (
             <div key={index} className="mb-10">
-              {/* Cabeçalho da data */}
-              <div className="flex justify-between items-end mb-6 pb-2 border-b border-zinc-900">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl md:text-5xl font-bold tracking-tight">{dayNumber}</span>
-                  {groupIsToday && (
-                    <span className="text-pink-500 text-lg md:text-2xl tracking-widest font-semibold uppercase">
-                      Hoje
-                    </span>
-                  )}
+              {/* Cabeçalho da data: chip com o número + dia/mês — destaque separado dos compromissos */}
+              <div
+                className="flex items-center gap-3 mb-6 rounded-2xl px-4 py-3"
+                style={{ backgroundColor: `${viewColor}14`, border: `1px solid ${viewColor}33` }}
+              >
+                <span
+                  className="w-12 h-12 md:w-14 md:h-14 rounded-xl flex items-center justify-center text-2xl md:text-3xl font-bold text-white shadow-lg shrink-0"
+                  style={{ backgroundColor: viewColor }}
+                >
+                  {dayNumber}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-base md:text-xl font-bold tracking-widest" style={{ color: viewColor }}>
+                    {dayShort}
+                  </div>
+                  <div className="text-xs md:text-sm text-zinc-400 font-medium capitalize">
+                    {capitalize(monthYear)}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm md:text-base font-medium text-zinc-300">{dayName}</div>
-                  <div className="text-xs md:text-sm text-zinc-500">{monthYear}</div>
-                </div>
+                {groupIsToday && (
+                  <span className="shrink-0 px-2.5 py-1 rounded-full bg-pink-500/15 border border-pink-500/30 text-pink-400 text-xs font-bold uppercase tracking-wider">
+                    Hoje
+                  </span>
+                )}
               </div>
 
               {/* Lista de eventos */}
@@ -162,7 +162,11 @@ const CalendarListView = ({
                         type="button"
                         onClick={() => openEventModal(event)}
                         title="Editar / excluir"
-                        className="w-full flex items-start gap-3 group text-left"
+                        className="w-full flex items-start gap-3 group text-left border-l-4 border-transparent pl-2.5 rounded-lg py-1.5 transition-colors"
+                        style={{
+                          borderLeftColor: eventUser.color,
+                          backgroundColor: `${eventUser.color}0a`,
+                        }}
                       >
                         {/* Foto de perfil do responsável, com anel na cor do membro (estilo rede social) */}
                         <Avatar
@@ -172,7 +176,10 @@ const CalendarListView = ({
                         />
 
                         <div className="flex-1 pt-0.5 min-w-0">
-                          <h4 className="text-lg md:text-xl font-bold text-zinc-100 group-hover:text-white transition-colors">
+                          <h4
+                            className="text-lg md:text-xl font-medium transition-colors group-hover:brightness-125"
+                            style={{ color: eventUser.color }}
+                          >
                             {event.title}
                           </h4>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -300,6 +307,21 @@ const CalendarListView = ({
                 ))}
               </select>
             </div>
+            {/* Alertar o parceiro: importante → notifica até visualizar */}
+            <label className="flex items-start gap-3 p-3 bg-[#09090b] border border-zinc-800 rounded-xl cursor-pointer">
+              <input
+                type="checkbox"
+                name="alertar"
+                defaultChecked={editingEvent?.alertar ?? false}
+                className="w-4 h-4 mt-0.5 accent-pink-500"
+              />
+              <span className="text-sm text-zinc-300">
+                <span className="font-bold text-white">Alertar o parceiro</span>
+                <span className="block text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                  Importante: fica notificando até a pessoa visualizar o compromisso.
+                </span>
+              </span>
+            </label>
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1.5">
                 Notificar <span className="text-zinc-600">(quem recebe o aviso)</span>

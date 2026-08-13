@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 import {
   Bell,
   Calendar as CalendarIcon,
@@ -34,11 +35,14 @@ import {
   loadAvisos,
   loadFromSupabase,
   loadMetodosLembrete,
+  loadPresenca,
   markAllAvisosLidas,
   markAvisoLida,
+  markAvisosPorRef,
   saveAviso,
   saveMetodosLembrete,
   sendPushNotification,
+  setPresenca,
   syncEvents,
   syncItems,
   syncUsers,
@@ -132,8 +136,21 @@ const App = () => {
   const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [isAvisosOpen, setIsAvisosOpen] = useState(false);
 
-  const visibleAvisos = avisos.filter((a) => a.paraId === 'all' || a.paraId === currentUser.id);
-  const unreadCount = visibleAvisos.filter((a) => !a.lida).length;
+  // Presença online/offline: quem está com o app aberto agora (multi-aparelho)
+  const [presence, setPresence] = useState<Record<string, boolean>>({});
+  const presenceAnnouncedRef = useRef(false);
+
+  // Espelho dos avisos (para re-notificar compromissos importantes sem closures antigos)
+  const avisosRef = useRef(avisos);
+  useEffect(() => {
+    avisosRef.current = avisos;
+  }, [avisos]);
+
+  // Só avisos não lidos aparecem: ao marcar como lido, some da lista
+  const visibleAvisos = avisos.filter(
+    (a) => (a.paraId === 'all' || a.paraId === currentUser.id) && !a.lida,
+  );
+  const unreadCount = visibleAvisos.length;
 
   const addAviso = async (
     titulo: string,
@@ -158,13 +175,31 @@ const App = () => {
   };
 
   const marcarAvisoLida = (id: string) => {
-    setAvisos((prev) => prev.map((a) => (a.id === id ? { ...a, lida: true } : a)));
+    setAvisos((prev) => prev.filter((a) => a.id !== id));
     void markAvisoLida(id);
   };
 
   const marcarTodosLidos = () => {
-    setAvisos((prev) => prev.map((a) => ({ ...a, lida: true })));
+    setAvisos((prev) => prev.filter((a) => a.paraId !== 'all' && a.paraId !== currentUser.id));
     void markAllAvisosLidas();
+  };
+
+  // Parceiro visualizou o compromisso → avisos dele somem da lista e param de notificar
+  const visualizarCompromisso = (eventId: string) => {
+    setAvisos((prev) => prev.filter((a) => a.refId !== eventId));
+    void markAvisosPorRef(eventId);
+  };
+
+  // Envia um aviso manual direcionado ("Toda a família" ou um membro específico).
+  // O aviso fica na central da pessoa até ela marcar como lida (paraId filtra quem vê).
+  const enviarAvisoManual = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const mensagem = String(fd.get('mensagem') ?? '').trim();
+    const paraId = String(fd.get('paraId') ?? 'all');
+    if (!mensagem) return;
+    simulatePushAndWhatsapp('Aviso da família', mensagem, paraId, 'aviso');
+    e.currentTarget.reset();
   };
 
   // Reagenda os lembretes sempre que os eventos, o mercado ou os métodos mudarem
@@ -218,6 +253,137 @@ const App = () => {
   );
   // Incrementa para recarregar os dados quando a conexão mudar (ex.: usuário conectou nas Configurações)
   const [connSetup, setConnSetup] = useState(0);
+
+  // ——— Presença online: marca quem abriu o app, avisa a família e mostra online ———
+  useEffect(() => {
+    if (connectionState !== 'connected') return;
+
+    const report = (online: boolean) => void setPresenca(currentUserId, online);
+
+    // Avisa (aviso + push) que este usuário entrou no app — uma vez por sessão
+    const shouldAnnounce = !presenceAnnouncedRef.current;
+    presenceAnnouncedRef.current = true;
+    report(true);
+    if (shouldAnnounce) {
+      const action = `${currentUser.name} está online`;
+      const details = `${currentUser.name} abriu o app agora.`;
+      void addAviso(action, details, 'presenca', 'all');
+      void sendPushNotification(`FamíliaApp: ${action}`, details, '/', 'familiapp-presenca');
+      if (pushGranted && typeof Notification !== 'undefined') {
+        try {
+          new Notification(`FamíliaApp: ${action}`, {
+            body: details,
+            icon: currentUser.avatar,
+            tag: 'familiapp-presenca',
+          });
+        } catch (err) {
+          console.error('Erro no Push Nativo:', err);
+        }
+      }
+    }
+
+    // Heartbeat a cada 30s enquanto o app estiver visível
+    const heartbeat = window.setInterval(() => {
+      if (document.visibilityState === 'visible') report(true);
+    }, 30_000);
+
+    // Saiu da aba / fechou o app -> offline
+    const onVisibility = () => {
+      report(document.visibilityState === 'visible');
+    };
+    const onUnload = () => report(false);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onUnload);
+
+    return () => {
+      window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onUnload);
+      report(false);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionState, currentUserId]);
+
+  // Compromissos "Alertar": re-notifica a cada 15 min (e ao abrir) até o parceiro visualizar
+  useEffect(() => {
+    if (connectionState !== 'connected') return;
+    const renotify = () => {
+      for (const ev of eventsRef.current) {
+        if (!ev.alertar) continue;
+        const aviso = avisosRef.current.find((a) => a.refId === ev.id);
+        if (!aviso || aviso.lida) continue;
+        const owner = usersRef.current.find((u) => u.id === ev.userId);
+        const body = `Compromisso de ${owner?.name ?? 'alguém'} às ${ev.time}. Toque para visualizar.`;
+        void sendPushNotification(`⚠️ Importante: ${ev.title}`, body, '/', `familiapp-importante-${ev.id}`);
+        if (pushGranted && typeof Notification !== 'undefined') {
+          try {
+            new Notification(`⚠️ Importante: ${ev.title}`, {
+              body,
+              icon: owner?.avatar ?? currentUser.avatar,
+              tag: `familiapp-importante-${ev.id}`,
+            });
+          } catch (err) {
+            console.error('Erro no Push Nativo:', err);
+          }
+        }
+      }
+    };
+    const first = window.setTimeout(renotify, 8000); // depois da carga inicial
+    const interval = window.setInterval(renotify, 15 * 60 * 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionState]);
+
+  // Carrega quem está online e escuta mudanças em tempo real (multi-aparelho)
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let alive = true;
+
+    const refresh = async () => {
+      const map = await loadPresenca();
+      if (alive) setPresence(map);
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 30_000);
+
+    const channel = supabase
+      .channel('presenca-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'presenca' },
+        (payload) => {
+          if (!alive) return;
+          const row = (payload.new ?? payload.old) as
+            | { membro_id?: string; online?: boolean; atualizado_em?: string }
+            | undefined;
+          const id = row?.membro_id ? String(row.membro_id) : null;
+          if (!id || !row) return;
+          if (payload.eventType === 'DELETE') {
+            setPresence((prev) => {
+              if (!(id in prev)) return prev;
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
+            return;
+          }
+          const updated = new Date(String(row.atualizado_em ?? '')).getTime();
+          const online = Boolean(row.online) && !Number.isNaN(updated) && Date.now() - updated < 90_000;
+          setPresence((prev) => (prev[id] === online ? prev : { ...prev, [id]: online }));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
+  }, [connectionState]);
 
   // Último estado já confirmado no banco (para detectar mudanças locais pendentes)
   const lastEventsRef = useRef<FamilyEvent[]>(initialEvents);
@@ -415,10 +581,13 @@ const App = () => {
             className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-full bg-zinc-800/70 border border-zinc-700/70 active:ring-2 active:ring-pink-500/60 transition-all"
             aria-label="Entrar como outro usuário"
           >
-            <Avatar
-              user={currentUser}
-              className="w-7 h-7 rounded-full text-sm shadow-inner border border-zinc-700/50"
-            />
+            <span className="relative shrink-0">
+              <Avatar
+                user={currentUser}
+                className="w-7 h-7 rounded-full text-sm shadow-inner border border-zinc-700/50"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#121214]" />
+            </span>
             <span className="text-xs font-bold text-white max-w-[72px] truncate">
               {currentUser.name}
             </span>
@@ -466,10 +635,13 @@ const App = () => {
             Logado como:
           </div>
           <div className="flex items-center gap-3 bg-[#09090b] border border-zinc-800 rounded-xl p-2">
-            <Avatar
-              user={currentUser}
-              className="w-10 h-10 rounded-full text-xl shadow-inner border border-zinc-700/50 shrink-0"
-            />
+            <span className="relative shrink-0">
+              <Avatar
+                user={currentUser}
+                className="w-10 h-10 rounded-full text-xl shadow-inner border border-zinc-700/50 shrink-0"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#09090b]" />
+            </span>
             <select
               value={currentUser.id}
               onChange={(e) => setCurrentUserId(e.target.value)}
@@ -539,6 +711,7 @@ const App = () => {
             users={users}
             currentUser={currentUser}
             simulateNotifications={simulatePushAndWhatsapp}
+            onVisualizarCompromisso={visualizarCompromisso}
           />
         )}
         {activeTab === 'calendar' && calendarView === 'grid' && (
@@ -548,6 +721,7 @@ const App = () => {
             users={users}
             currentUser={currentUser}
             simulateNotifications={simulatePushAndWhatsapp}
+            onVisualizarCompromisso={visualizarCompromisso}
           />
         )}
         {activeTab === 'shopping' && (
@@ -568,6 +742,7 @@ const App = () => {
             setPushGranted={setPushGranted}
             metodosLembrete={metodosLembrete}
             setMetodosLembrete={setMetodosLembrete}
+            presence={presence}
             showNotification={showNotification}
             logoVariant={logoVariant}
             setLogoVariant={setLogoVariant}
@@ -600,6 +775,7 @@ const App = () => {
         <UserSwitcherSheet
           users={users}
           currentUser={currentUser}
+          presence={presence}
           onSelect={(id) => {
             setCurrentUserId(id);
             setIsUserSheetOpen(false);
@@ -646,29 +822,68 @@ const App = () => {
                 </button>
               </div>
             </div>
+            {/* Enviar aviso: direciona para um membro e fica lá até ser lido */}
+            <form onSubmit={enviarAvisoManual} className="p-4 border-b border-zinc-800 shrink-0 space-y-3">
+              <label htmlFor="aviso-mensagem" className="block text-xs font-medium text-zinc-400">
+                Enviar aviso para a família
+              </label>
+              <textarea
+                id="aviso-mensagem"
+                name="mensagem"
+                required
+                rows={2}
+                placeholder='Ex.: "Cheguei em casa", "Lembra do compromisso..."'
+                className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all placeholder-zinc-700 text-sm resize-none"
+              />
+              <div className="flex gap-2">
+                <select
+                  name="paraId"
+                  defaultValue="all"
+                  className="flex-1 min-w-0 p-2.5 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-pink-500 outline-none transition-all appearance-none text-sm"
+                >
+                  <option value="all">Toda a família</option>
+                  {users
+                    .filter((u) => u.id !== currentUser.id)
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        Apenas {u.name}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="submit"
+                  className="px-4 py-2.5 bg-pink-500 hover:bg-pink-400 text-white text-sm font-bold rounded-xl transition-colors shrink-0"
+                >
+                  Enviar
+                </button>
+              </div>
+            </form>
             <div className="overflow-y-auto custom-scrollbar flex-1 max-h-[62dvh] md:max-h-[55vh]">
               {visibleAvisos.length === 0 ? (
                 <div className="text-center text-zinc-500 text-sm py-12 px-4">
-                  Nenhum aviso ainda. Quando alguém marcar um compromisso ou avisar a família, aparece aqui.
+                  Nenhum aviso pendente. Quando alguém marcar um compromisso ou avisar a família, aparece aqui —
+                  e some quando você marcar como lido.
                 </div>
               ) : (
                 <div className="divide-y divide-zinc-800/70">
                   {visibleAvisos.map((a) => {
                     const sender = users.find((u) => u.id === a.deId);
                     return (
-                      <div
-                        key={a.id}
-                        className={`flex items-start gap-3 p-4 ${!a.lida ? 'bg-pink-500/[0.04]' : ''}`}
-                      >
-                        <Avatar
-                          user={sender ?? currentUser}
-                          className={`w-10 h-10 rounded-full text-lg shrink-0 ${!a.lida ? 'aviso-avatar-unread' : ''}`}
-                          style={
-                            sender
-                              ? { boxShadow: `0 0 0 2px ${sender.color}` }
-                              : undefined
-                          }
-                        />
+                      <div key={a.id} className="flex items-start gap-3 p-4 bg-pink-500/[0.04]">
+                        <span className="relative shrink-0">
+                          <Avatar
+                            user={sender ?? currentUser}
+                            className="w-10 h-10 rounded-full text-lg shrink-0 aviso-avatar-unread"
+                            style={
+                              sender
+                                ? { boxShadow: `0 0 0 2px ${sender.color}` }
+                                : undefined
+                            }
+                          />
+                          {sender && presence[sender.id] && (
+                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#121214]" />
+                          )}
+                        </span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-bold text-white truncate">{a.titulo}</p>
@@ -682,18 +897,12 @@ const App = () => {
                             >
                               {sender?.name ?? 'Família'}
                             </span>
-                            {a.lida ? (
-                              <span className="text-[10px] text-zinc-500 flex items-center gap-1">
-                                <Check className="w-3 h-3" /> Lida
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => marcarAvisoLida(a.id)}
-                                className="text-[10px] text-pink-400 font-semibold hover:text-pink-300 flex items-center gap-1"
-                              >
-                                <Check className="w-3 h-3" /> Marcar como lida
-                              </button>
-                            )}
+                            <button
+                              onClick={() => marcarAvisoLida(a.id)}
+                              className="text-[10px] text-pink-400 font-semibold hover:text-pink-300 flex items-center gap-1"
+                            >
+                              <Check className="w-3 h-3" /> Marcar como lida
+                            </button>
                           </div>
                         </div>
                       </div>
