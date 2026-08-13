@@ -78,6 +78,8 @@ export interface Gasto {
   parcelas: number;
   /** Método de pagamento (Pix, Cartão...). */
   metodo: string;
+  /** Nome do cartão usado (ex.: Nubank) — diferencia cartões. */
+  cartao?: string;
   /** Observação/descrição (opcional). */
   observacao?: string;
   /** Quitado: todas as parcelas pagas. */

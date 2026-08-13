@@ -18,6 +18,36 @@ body {
   margin: 0;
 }
 
+/* ——— Mobile: evitar zoom indesejado e toques que quebram o layout ——— */
+/* O iOS dá zoom automático ao focar campos com fonte menor que 16px.
+   No celular, os campos do app ficam com 16px para nunca dar zoom. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Sem zoom por toque duplo / delay de 300ms em elementos interativos */
+button,
+[role='button'],
+a,
+select,
+input[type='checkbox'],
+input[type='date'],
+input[type='time'] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Nunca rolar para os lados (conteúdo vaza de algum modal/card) */
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 /* Caixa do modal: a altura máxima é sempre limitada pela tela, com fallback
    para navegadores que ainda não suportam a unidade dvh. Garante que o rodapé
    fixo (Salvar/Cancelar) nunca fique cortado ou escondido atrás do teclado. */

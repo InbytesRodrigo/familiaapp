@@ -67,6 +67,7 @@ create table if not exists public.gastos (
   data date not null,             -- data da compra (base das datas das parcelas)
   parcelas integer not null default 1,  -- 1 = à vista
   metodo text not null default 'Pix',
+  cartao text,                    -- nome do cartão usado (ex.: Nubank)
   observacao text,                -- descrição/observação
   quitado boolean not null default false,
   criado_por uuid references public.familia(id) on delete set null,

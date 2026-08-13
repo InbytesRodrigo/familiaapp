@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   BadgeCheck,
+  BarChart3,
   Calendar as CalendarIcon,
   Check,
   CreditCard,
@@ -8,13 +9,14 @@ import {
   Plus,
   Receipt,
   Trash2,
+  UserCircle2,
   Wallet,
   X,
 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import { newId } from '../lib/db';
-import { toDateInput } from '../utils';
+import { capitalize, toDateInput } from '../utils';
 import type { FamilyEvent, Gasto, Notify, User } from '../types';
 
 const GREEN = '#10b981';
@@ -64,6 +66,7 @@ interface GastosViewProps {
   gastos: Gasto[];
   setGastos: React.Dispatch<React.SetStateAction<Gasto[]>>;
   currentUser: User;
+  users: User[];
   simulateNotifications: Notify;
   /** Sincroniza os compromissos de parcela no calendário (events). */
   onSyncCalendarEvents: (gastoId: string, eventos: FamilyEvent[]) => void;
@@ -73,6 +76,7 @@ const GastosView = ({
   gastos,
   setGastos,
   currentUser,
+  users,
   simulateNotifications,
   onSyncCalendarEvents,
 }: GastosViewProps) => {
@@ -84,6 +88,7 @@ const GastosView = ({
   const [data, setData] = useState('');
   const [parcelas, setParcelas] = useState(1);
   const [metodo, setMetodo] = useState(METODOS[0]);
+  const [cartao, setCartao] = useState('');
   const [observacao, setObservacao] = useState('');
   // Exclusão com confirmação dentro do app (sem delay do diálogo do navegador)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -100,6 +105,30 @@ const GastosView = ({
     return (a.data ?? '').localeCompare(b.data ?? '');
   });
 
+  // Resumo por mês (mês da compra): total, quitado (abate) e em aberto
+  const now = new Date();
+  const monthStats = Array.from({ length: 12 }, (_, i) => {
+    const mes = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const doMes = gastos.filter((g) => {
+      const [y, m] = (g.data ?? '').split('-').map(Number);
+      return y === mes.getFullYear() && m === mes.getMonth() + 1;
+    });
+    const total = doMes.reduce((acc, g) => acc + g.valor, 0);
+    const quitado = doMes.filter((g) => g.quitado).reduce((acc, g) => acc + g.valor, 0);
+    return {
+      mes,
+      label: capitalize(
+        new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(mes),
+      ),
+      total,
+      quitado,
+      aberto: total - quitado,
+      count: doMes.length,
+    };
+  })
+    .filter((m) => m.count > 0)
+    .slice(0, 6);
+
   const openAdd = () => {
     setEditing(null);
     setTitulo('');
@@ -107,6 +136,7 @@ const GastosView = ({
     setData(toDateInput(new Date()));
     setParcelas(1);
     setMetodo(METODOS[0]);
+    setCartao('');
     setObservacao('');
     setIsModalOpen(true);
   };
@@ -118,6 +148,7 @@ const GastosView = ({
     setData(g.data);
     setParcelas(g.parcelas);
     setMetodo(g.metodo);
+    setCartao(g.cartao ?? '');
     setObservacao(g.observacao ?? '');
     setIsModalOpen(true);
   };
@@ -142,6 +173,7 @@ const GastosView = ({
         data,
         parcelas: parcelasNum,
         metodo,
+        cartao: cartao.trim() || undefined,
         observacao: observacao.trim() || undefined,
       };
       setGastos((prev) => prev.map((g) => (g.id === editing.id ? atualizado : g)));
@@ -162,6 +194,7 @@ const GastosView = ({
         data,
         parcelas: parcelasNum,
         metodo,
+        cartao: cartao.trim() || undefined,
         observacao: observacao.trim() || undefined,
         quitado: false,
         criadoPor: currentUser.id,
@@ -238,6 +271,44 @@ const GastosView = ({
           </div>
         </div>
 
+        {/* Gastos por mês: total com o quitado abatendo em tempo real */}
+        {monthStats.length > 0 && (
+          <div className="bg-[#121214] border border-zinc-800 rounded-3xl p-4 mb-6">
+            <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-emerald-500" /> Gastos por mês
+            </h3>
+            <p className="text-xs text-zinc-500 mb-4">
+              Ao marcar um gasto como quitado, ele abate do mês da compra.
+            </p>
+            <div className="space-y-3">
+              {monthStats.map(({ mes, label, total, quitado, aberto, count }) => {
+                const pct = total > 0 ? Math.round((quitado / total) * 100) : 0;
+                return (
+                  <div key={mes.getTime()} className="rounded-2xl border border-zinc-800 p-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-sm font-bold text-zinc-200 capitalize">{label}</span>
+                      <span className="text-sm font-bold text-white">R$ {total.toFixed(2)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-2">
+                      <div
+                        className="h-full bg-emerald-500 transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+                      <span className="text-emerald-400">
+                        Quitado R$ {quitado.toFixed(2)}
+                        {count > 0 && ` • ${count} gasto${count > 1 ? 's' : ''}`}
+                      </span>
+                      <span className="text-zinc-500">Em aberto R$ {aberto.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Lista */}
         <div className="space-y-3">
           {sorted.length === 0 && (
@@ -281,12 +352,25 @@ const GastosView = ({
                   </span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full border border-zinc-800 bg-zinc-800/50 text-zinc-300 font-bold flex items-center gap-1">
                     <CreditCard className="w-3 h-3" /> {g.metodo}
+                    {g.cartao && <span className="text-white">• {g.cartao}</span>}
                   </span>
                   {g.quitado && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-bold flex items-center gap-1">
                       <BadgeCheck className="w-3 h-3" /> Quitado
                     </span>
                   )}
+                </div>
+                <div className="flex items-center gap-1.5 mt-2 text-[11px] text-zinc-500">
+                  <UserCircle2 className="w-3.5 h-3.5" />
+                  <span>
+                    Registrado por{' '}
+                    <span
+                      className="font-bold"
+                      style={{ color: (users.find((u) => u.id === g.criadoPor) ?? currentUser).color }}
+                    >
+                      {(users.find((u) => u.id === g.criadoPor) ?? currentUser).name}
+                    </span>
+                  </span>
                 </div>
               </div>
 
@@ -446,6 +530,20 @@ const GastosView = ({
                 ))}
               </select>
             </div>
+            {(metodo === 'Cartão de crédito' || metodo === 'Cartão de débito') && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1.5">
+                  Nome do cartão <span className="text-zinc-600">(opcional — ex.: Nubank, Itaú)</span>
+                </label>
+                <input
+                  type="text"
+                  value={cartao}
+                  onChange={(e) => setCartao(e.target.value)}
+                  placeholder="Ex.: Nubank"
+                  className="w-full p-3 bg-[#09090b] border border-zinc-800 text-white rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all placeholder-zinc-700"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1.5">
                 Observação <span className="text-zinc-600">(opcional)</span>

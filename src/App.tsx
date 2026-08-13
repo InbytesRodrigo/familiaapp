@@ -864,6 +864,7 @@ const App = () => {
             gastos={gastos}
             setGastos={setGastosSynced}
             currentUser={currentUser}
+            users={users}
             simulateNotifications={simulatePushAndWhatsapp}
             onSyncCalendarEvents={syncGastoEvents}
           />
