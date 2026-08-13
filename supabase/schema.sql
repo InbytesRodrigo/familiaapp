@@ -34,6 +34,8 @@ create table if not exists public.mercado (
   preco numeric(10,2) not null default 0,
   comprado boolean not null default false,
   membro_id uuid references public.familia(id) on delete set null,
+  data date,           -- item que precisa para uma data específica
+  comprado_em date,    -- data em que a compra foi concluída (relatório mensal)
   criado_em timestamptz not null default now()
 );
 

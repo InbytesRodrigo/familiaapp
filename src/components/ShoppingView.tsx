@@ -1,8 +1,22 @@
-import { useState } from 'react';
-import { Archive, Calendar as CalendarIcon, Check, DollarSign, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import {
+  Archive,
+  BarChart3,
+  Calendar as CalendarIcon,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  DollarSign,
+  Pencil,
+  Plus,
+  ShoppingCart,
+  Trash2,
+  X,
+} from 'lucide-react';
 import type { FormEvent } from 'react';
 import Modal from './Modal';
 import { newId } from '../lib/db';
+import { capitalize, toDateInput } from '../utils';
 import type { Notify, ShoppingItem, User } from '../types';
 
 /** YYYY-MM-DD → DD/MM (rótulo do item com data). */
@@ -40,12 +54,58 @@ const ShoppingView = ({
   const [showArchived, setShowArchived] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null);
+  // Mês selecionado no relatório de gastos
+  const [reportMonth, setReportMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  // Exclusão com confirmação dentro do app (sem delay do diálogo do navegador)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const confirmTimerRef = useRef<number | undefined>(undefined);
 
   const activeItems = items.filter((i) => !i.archived);
   const archivedItems = items.filter((i) => i.archived);
 
   const totalActive = activeItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const totalArchived = archivedItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+
+  // Data usada no relatório: a da compra concluída; itens antigos usam a de criação
+  const boughtOn = (item: ShoppingItem): string | undefined =>
+    item.compradoEm ?? (item.criadoEm ? item.criadoEm.slice(0, 10) : undefined);
+
+  // Gasto do mês selecionado no topo
+  const monthTotal = archivedItems.reduce((acc, item) => {
+    const d = boughtOn(item);
+    if (!d) return acc;
+    const [y, m] = d.split('-').map(Number);
+    if (y === reportMonth.getFullYear() && m === reportMonth.getMonth() + 1) {
+      acc += item.price * item.quantity;
+    }
+    return acc;
+  }, 0);
+
+  const monthLabel = capitalize(
+    new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(reportMonth),
+  );
+
+  // Últimos 6 meses (a partir do selecionado) para o controle de gastos
+  const monthStats = Array.from({ length: 6 }, (_, i) => {
+    const month = new Date(reportMonth.getFullYear(), reportMonth.getMonth() - i, 1);
+    const total = archivedItems.reduce((acc, item) => {
+      const d = boughtOn(item);
+      if (!d) return acc;
+      const [y, m] = d.split('-').map(Number);
+      if (y === month.getFullYear() && m === month.getMonth() + 1) acc += item.price * item.quantity;
+      return acc;
+    }, 0);
+    return {
+      month,
+      label: capitalize(
+        new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(month),
+      ),
+      total,
+    };
+  });
 
   const resetForm = () => {
     setNewItemName('');
@@ -68,12 +128,6 @@ const ShoppingView = ({
     setNewItemPrice(item.price ? String(item.price) : '');
     setNewItemDate(item.date ?? '');
     setIsFormOpen(true);
-  };
-
-  const handleDeleteItem = (item: ShoppingItem) => {
-    if (!window.confirm(`Excluir "${item.name}" da lista de mercado?`)) return;
-    // Exclusão não dispara push/aviso (só adicionar/editar avisa a família)
-    setItems(items.filter((i) => i.id !== item.id));
   };
 
   const handleSubmitItem = (e: FormEvent<HTMLFormElement>) => {
@@ -115,15 +169,15 @@ const ShoppingView = ({
     if (existingArchived) {
       setItems(
         items.map((i) =>
-          i.id === existingArchived.id
-            ? {
-                ...i,
-                archived: false,
-                quantity: newItemQuantity,
-                price: parseFloat(newItemPrice) || i.price,
-                userId: currentUser.id,
-                date: newItemDate || i.date,
-              }
+          i.id === existingArchived.id              ? {
+                  ...i,
+                  archived: false,
+                  quantity: newItemQuantity,
+                  price: parseFloat(newItemPrice) || i.price,
+                  userId: currentUser.id,
+                  date: newItemDate || i.date,
+                  compradoEm: undefined,
+                }
             : i,
         ),
       );
@@ -158,7 +212,18 @@ const ShoppingView = ({
   };
 
   const toggleArchive = (id: string, name: string, isArchiving: boolean) => {
-    setItems(items.map((i) => (i.id === id ? { ...i, archived: isArchiving } : i)));
+    setItems(
+      items.map((i) =>
+        i.id === id
+          ? {
+              ...i,
+              archived: isArchiving,
+              // Concluiu a compra → grava a data (base do relatório do mês vigente)
+              compradoEm: isArchiving ? toDateInput(new Date()) : undefined,
+            }
+          : i,
+      ),
+    );
     if (isArchiving) {
       simulateNotifications('Item Comprado', `${currentUser.name} comprou "${name}".`, 'all', 'mercado', id);
     } else {
@@ -172,11 +237,29 @@ const ShoppingView = ({
     }
   };
 
+  const askDelete = (id: string) => {
+    setConfirmDeleteId(id);
+    window.clearTimeout(confirmTimerRef.current);
+    confirmTimerRef.current = window.setTimeout(() => setConfirmDeleteId(null), 4000);
+  };
+
+  const cancelDelete = () => {
+    window.clearTimeout(confirmTimerRef.current);
+    setConfirmDeleteId(null);
+  };
+
+  const handleDeleteItem = (item: ShoppingItem) => {
+    window.clearTimeout(confirmTimerRef.current);
+    setConfirmDeleteId(null);
+    // Exclusão não dispara push/aviso (só adicionar/editar avisa a família)
+    setItems(items.filter((i) => i.id !== item.id));
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#09090b] relative">
       <div className="px-4 py-6 md:px-10 max-w-4xl mx-auto w-full flex-1 overflow-y-auto custom-scrollbar pb-24">
-        {/* Resumo financeiro */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        {/* Resumo financeiro: a comprar + gasto do mês (com controle de mês) + total */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
           <div className="bg-[#121214] p-5 rounded-3xl border border-zinc-800 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-zinc-400">
               <ShoppingCart className="w-4 h-4" /> <span className="text-sm font-medium">A Comprar</span>
@@ -184,10 +267,61 @@ const ShoppingView = ({
             <span className="text-2xl md:text-3xl font-bold text-white">R$ {totalActive.toFixed(2)}</span>
           </div>
           <div className="bg-pink-500/10 p-5 rounded-3xl border border-pink-500/20 flex flex-col gap-2">
-            <div className="flex items-center gap-2 text-pink-400">
-              <DollarSign className="w-4 h-4" /> <span className="text-sm font-medium">Gasto Realizado</span>
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-2 text-pink-400">
+                <DollarSign className="w-4 h-4" /> <span className="text-sm font-medium">Gasto do Mês</span>
+              </div>
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={() => setReportMonth(new Date(reportMonth.getFullYear(), reportMonth.getMonth() - 1, 1))}
+                  className="p-1 text-pink-400 hover:bg-pink-500/15 rounded-lg transition-colors"
+                  aria-label="Mês anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setReportMonth(new Date(reportMonth.getFullYear(), reportMonth.getMonth() + 1, 1))}
+                  className="p-1 text-pink-400 hover:bg-pink-500/15 rounded-lg transition-colors"
+                  aria-label="Próximo mês"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <span className="text-2xl md:text-3xl font-bold text-pink-500">R$ {totalArchived.toFixed(2)}</span>
+            <span className="text-xs font-semibold text-pink-300 capitalize truncate">{monthLabel}</span>
+            <span className="text-2xl md:text-3xl font-bold text-pink-500">R$ {monthTotal.toFixed(2)}</span>
+          </div>
+          <div className="bg-[#121214] p-5 rounded-3xl border border-zinc-800 flex flex-col gap-2 col-span-2 md:col-span-1">
+            <div className="flex items-center gap-2 text-zinc-400">
+              <BarChart3 className="w-4 h-4" /> <span className="text-sm font-medium">Gasto Total</span>
+            </div>
+            <span className="text-2xl md:text-3xl font-bold text-white">R$ {totalArchived.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* Controle de gastos por mês */}
+        <div className="bg-[#121214] border border-zinc-800 rounded-3xl p-4 mb-8">
+          <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-pink-500" /> Gastos por mês
+          </h3>
+          <div className="space-y-2">
+            {monthStats.map(({ month, label, total }) => {
+              const selected = month.getTime() === reportMonth.getTime();
+              return (
+                <button
+                  key={month.getTime()}
+                  onClick={() => setReportMonth(month)}
+                  className={`w-full flex items-center justify-between p-3 rounded-xl border transition-colors ${
+                    selected ? 'border-pink-500/40 bg-pink-500/10' : 'border-zinc-800 hover:border-zinc-600'
+                  }`}
+                >
+                  <span className="text-sm font-medium text-zinc-300 capitalize">{label}</span>
+                  <span className={`text-sm font-bold ${selected ? 'text-pink-400' : 'text-white'}`}>
+                    R$ {total.toFixed(2)}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -242,23 +376,45 @@ const ShoppingView = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <span className="font-bold text-white mr-2">
-                    R$ {(item.price * item.quantity).toFixed(2)}
-                  </span>
-                  <button
-                    onClick={() => openEditItem(item)}
-                    className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
-                    title="Editar item"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteItem(item)}
-                    className="p-2 text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
-                    title="Excluir item"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {confirmDeleteId === item.id ? (
+                    <>
+                      <span className="text-[10px] font-bold text-red-400 mr-1">Excluir?</span>
+                      <button
+                        onClick={() => handleDeleteItem(item)}
+                        className="p-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors"
+                        title="Confirmar exclusão"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={cancelDelete}
+                        className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                        title="Cancelar"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-bold text-white mr-2">
+                        R$ {(item.price * item.quantity).toFixed(2)}
+                      </span>
+                      <button
+                        onClick={() => openEditItem(item)}
+                        className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                        title="Editar item"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => askDelete(item.id)}
+                        className="p-2 text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                        title="Excluir item"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -297,16 +453,38 @@ const ShoppingView = ({
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <span className="font-bold text-zinc-500 line-through mr-2">
-                      R$ {(item.price * item.quantity).toFixed(2)}
-                    </span>
-                    <button
-                      onClick={() => handleDeleteItem(item)}
-                      className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
-                      title="Excluir do histórico"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {confirmDeleteId === item.id ? (
+                      <>
+                        <span className="text-[10px] font-bold text-red-400 mr-1">Excluir?</span>
+                        <button
+                          onClick={() => handleDeleteItem(item)}
+                          className="p-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors"
+                          title="Confirmar exclusão"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={cancelDelete}
+                          className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                          title="Cancelar"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-bold text-zinc-500 line-through mr-2">
+                          R$ {(item.price * item.quantity).toFixed(2)}
+                        </span>
+                        <button
+                          onClick={() => askDelete(item.id)}
+                          className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
+                          title="Excluir do histórico"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

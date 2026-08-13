@@ -27,6 +27,10 @@ export interface ShoppingItem {
   userId: string;
   /** Data opcional (YYYY-MM-DD) — item que precisa para uma data específica. */
   date?: string;
+  /** Data em que a compra foi concluída (YYYY-MM-DD) — base do relatório mensal. */
+  compradoEm?: string;
+  /** Data de criação no banco (fallback do relatório para itens antigos). */
+  criadoEm?: string;
 }
 
 /** Aviso/mensagem entre membros, com estado de lido/não lido. */

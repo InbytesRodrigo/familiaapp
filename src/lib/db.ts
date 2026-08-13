@@ -63,6 +63,7 @@ const itemToDb = (i: ShoppingItem): Row => ({
   comprado: i.archived,
   membro_id: i.userId,
   data: i.date ?? null,
+  comprado_em: i.compradoEm ?? null,
 });
 
 const dbToItem = (row: Row): ShoppingItem => ({
@@ -73,6 +74,8 @@ const dbToItem = (row: Row): ShoppingItem => ({
   archived: Boolean(row.comprado),
   userId: String(row.membro_id ?? ''),
   date: row.data ? String(row.data) : undefined,
+  compradoEm: row.comprado_em ? String(row.comprado_em) : undefined,
+  criadoEm: row.criado_em ? String(row.criado_em) : undefined,
 });
 
 // ——— Carga inicial + seed dos dados demo ———
