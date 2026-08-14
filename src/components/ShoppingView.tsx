@@ -64,6 +64,12 @@ const ShoppingView = ({
   // Exclusão com confirmação dentro do app (sem delay do diálogo do navegador)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const confirmTimerRef = useRef<number | undefined>(undefined);
+  // Seleção: tocar no item só marca visualmente — comprar exige o botão "Concluir Compra"
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmComplete, setConfirmComplete] = useState(false);
+  const confirmCompleteTimerRef = useRef<number | undefined>(undefined);
+  // Guarda contra toques que deslizam (rolar a lista não deve marcar item)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const activeItems = items.filter((i) => !i.archived);
   const archivedItems = items.filter((i) => i.archived);
@@ -253,13 +259,84 @@ const ShoppingView = ({
   const handleDeleteItem = (item: ShoppingItem) => {
     window.clearTimeout(confirmTimerRef.current);
     setConfirmDeleteId(null);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(item.id);
+      return next;
+    });
     // Exclusão não dispara push/aviso (só adicionar/editar avisa a família)
     setItems(items.filter((i) => i.id !== item.id));
   };
 
+  // Registra onde o dedo encostou para distinguir toque de deslize
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  /** Só considera um toque como clique se o dedo não deslizou (evita ativar ao rolar). */
+  const isTap = (e: React.MouseEvent): boolean => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return true; // clique de mouse
+    return Math.hypot(e.clientX - start.x, e.clientY - start.y) < 10;
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    window.clearTimeout(confirmCompleteTimerRef.current);
+    setConfirmComplete(false);
+  };
+
+  const clearSelection = () => {
+    window.clearTimeout(confirmCompleteTimerRef.current);
+    setSelectedIds(new Set());
+    setConfirmComplete(false);
+  };
+
+  const cancelCompleteConfirm = () => {
+    window.clearTimeout(confirmCompleteTimerRef.current);
+    setConfirmComplete(false);
+  };
+
+  const armCompletePurchase = () => {
+    setConfirmComplete(true);
+    window.clearTimeout(confirmCompleteTimerRef.current);
+    confirmCompleteTimerRef.current = window.setTimeout(() => setConfirmComplete(false), 5000);
+  };
+
+  const handleCompletePurchase = () => {
+    window.clearTimeout(confirmCompleteTimerRef.current);
+    setConfirmComplete(false);
+    const selected = items.filter((i) => selectedIds.has(i.id));
+    if (selected.length === 0) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setItems(
+      items.map((i) =>
+        selectedIds.has(i.id)
+          ? { ...i, archived: true, compradoEm: toDateInput(new Date()) }
+          : i,
+      ),
+    );
+    selected.forEach((item) => {
+      simulateNotifications('Item Comprado', `${currentUser.name} comprou "${item.name}".`, 'all', 'mercado', item.id);
+    });
+    setSelectedIds(new Set());
+  };
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#09090b] relative">
-      <div className="px-4 py-6 md:px-10 max-w-4xl mx-auto w-full flex-1 overflow-y-auto custom-scrollbar pb-24">
+      <div
+        onTouchStart={handleTouchStart}
+        className="px-4 py-6 md:px-10 max-w-4xl mx-auto w-full flex-1 overflow-y-auto custom-scrollbar pb-24"
+      >
         {/* Resumo financeiro: a comprar + gasto do mês (com controle de mês) + total */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
           <div className="bg-[#121214] p-5 rounded-3xl border border-zinc-800 flex flex-col gap-2">
@@ -315,14 +392,29 @@ const ShoppingView = ({
             return (
               <div
                 key={item.id}
-                className="bg-[#121214] border border-zinc-800 p-4 rounded-2xl flex items-center justify-between gap-4 group hover:border-zinc-700 transition-colors"
+                onClick={(e) => {
+                  if (isTap(e)) toggleSelect(item.id);
+                }}
+                className={`bg-[#121214] border p-4 rounded-2xl flex items-center justify-between gap-4 group cursor-pointer select-none transition-colors ${
+                  selectedIds.has(item.id)
+                    ? 'border-pink-500/60 bg-pink-500/5'
+                    : 'border-zinc-800 hover:border-zinc-700'
+                }`}
               >
                 <div className="flex items-center gap-4 flex-1 overflow-hidden">
                   <button
-                    onClick={() => toggleArchive(item.id, item.name, true)}
-                    className="w-6 h-6 rounded-md border-2 border-zinc-600 flex items-center justify-center hover:border-pink-500 hover:bg-pink-500/10 transition-colors shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isTap(e)) toggleSelect(item.id);
+                    }}
+                    className={`w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
+                      selectedIds.has(item.id)
+                        ? 'border-pink-500 bg-pink-500 text-white'
+                        : 'border-zinc-600 hover:border-pink-500 hover:bg-pink-500/10'
+                    }`}
+                    aria-label={selectedIds.has(item.id) ? 'Remover seleção' : 'Selecionar item'}
                   >
-                    <Check className="w-4 h-4 text-transparent group-hover:text-pink-500" />
+                    {selectedIds.has(item.id) && <Check className="w-4 h-4" />}
                   </button>
                   <div className="flex-1 truncate">
                     <p className="font-bold text-white truncate">{item.name}</p>
@@ -355,14 +447,20 @@ const ShoppingView = ({
                     <>
                       <span className="text-[10px] font-bold text-red-400 mr-1">Excluir?</span>
                       <button
-                        onClick={() => handleDeleteItem(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteItem(item);
+                        }}
                         className="p-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors"
                         title="Confirmar exclusão"
                       >
                         <Check className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={cancelDelete}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cancelDelete();
+                        }}
                         className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
                         title="Cancelar"
                       >
@@ -375,14 +473,20 @@ const ShoppingView = ({
                         R$ {(item.price * item.quantity).toFixed(2)}
                       </span>
                       <button
-                        onClick={() => openEditItem(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditItem(item);
+                        }}
                         className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
                         title="Editar item"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => askDelete(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          askDelete(item.id);
+                        }}
                         className="p-2 text-red-400/80 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
                         title="Excluir item"
                       >
@@ -415,7 +519,10 @@ const ShoppingView = ({
                 >
                   <div className="flex items-center gap-4 flex-1">
                     <button
-                      onClick={() => toggleArchive(item.id, item.name, false)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isTap(e)) toggleArchive(item.id, item.name, false);
+                      }}
                       className="w-6 h-6 rounded-md bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0"
                     >
                       <Check className="w-4 h-4" />
@@ -506,13 +613,62 @@ const ShoppingView = ({
         </div>
       </div>
 
-      {/* Botão flutuante (FAB) */}
-      <button
-        onClick={openAddItem}
-        className="absolute bottom-24 md:bottom-8 right-8 w-16 h-16 bg-pink-500 hover:bg-pink-400 text-white rounded-full shadow-[0_0_20px_rgba(236,72,153,0.4)] flex items-center justify-center transition-transform hover:scale-105 z-10"
-      >
-        <Plus className="w-8 h-8" />
-      </button>
+      {/* Barra de ação: aparece quando há itens selecionados (só aqui conclui a compra) */}
+      {selectedIds.size > 0 && (
+        <div className="absolute bottom-24 md:bottom-8 left-4 right-4 z-20">
+          <div className="bg-zinc-900/95 backdrop-blur border border-zinc-700 rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-sm font-bold text-white truncate">
+                {selectedIds.size} {selectedIds.size === 1 ? 'item selecionado' : 'itens selecionados'}
+              </span>
+              <button
+                onClick={clearSelection}
+                className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors shrink-0"
+                title="Limpar seleção"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {confirmComplete ? (
+                <>
+                  <span className="text-xs font-bold text-emerald-400 whitespace-nowrap">Confirmar?</span>
+                  <button
+                    onClick={handleCompletePurchase}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold rounded-xl transition-colors flex items-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" /> Sim, comprar
+                  </button>
+                  <button
+                    onClick={cancelCompleteConfirm}
+                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                    title="Cancelar"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={armCompletePurchase}
+                  className="px-4 py-2.5 bg-pink-500 hover:bg-pink-400 text-white text-sm font-bold rounded-xl transition-colors flex items-center gap-2"
+                >
+                  <ShoppingCart className="w-4 h-4" /> Concluir Compra
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Botão flutuante (FAB) — some enquanto há itens selecionados */}
+      {selectedIds.size === 0 && (
+        <button
+          onClick={openAddItem}
+          className="absolute bottom-24 md:bottom-8 right-8 w-16 h-16 bg-pink-500 hover:bg-pink-400 text-white rounded-full shadow-[0_0_20px_rgba(236,72,153,0.4)] flex items-center justify-center transition-transform hover:scale-105 z-10"
+        >
+          <Plus className="w-8 h-8" />
+        </button>
+      )}
 
       {/* Modal de novo/editar item */}
       {isFormOpen && (
