@@ -60,7 +60,7 @@ const CalendarListView = ({
     if (editingEvent) {
       setEvents((prev) => prev.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data } : ev)));
       simulateNotifications(
-        data.alertar ? '⚠️ Compromisso Importante' : 'Compromisso Atualizado',
+        'Compromisso Atualizado',
         `${currentUser.name} atualizou "${data.title}".${data.alertar ? ' ⚠️ Importante — abra para visualizar.' : ''}`,
         notifyParaId,
         'evento',
@@ -94,8 +94,6 @@ const CalendarListView = ({
   };
 
   const openEventModal = (event: FamilyEvent | null) => {
-    // Parceiro visualizou o compromisso → avisos ficam lidos e param de notificar
-    if (event?.alertar) onVisualizarCompromisso(event.id);
     setEditingEvent(event);
     setIsEventModalOpen(true);
   };
@@ -111,15 +109,6 @@ const CalendarListView = ({
     );
     // Concluiu = visualizou: avisos somem e param de notificar
     if (concluido) onVisualizarCompromisso(event.id);
-    simulateNotifications(
-      concluido ? 'Compromisso Concluído ✅' : 'De volta aos pendentes',
-      concluido
-        ? `"${event.title}" foi concluído (${formatDateBR(toDateInput(new Date()))}).`
-        : `"${event.title}" voltou para os pendentes.`,
-      'all',
-      'evento',
-      event.id,
-    );
   };
 
   // Agrupa eventos por data

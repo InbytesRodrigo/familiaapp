@@ -10,6 +10,7 @@ interface UserSwitcherSheetProps {
   onSelect: (id: string) => void;
   onManageProfiles: () => void;
   onClose: () => void;
+  required?: boolean;
 }
 
 /** Bottom sheet mobile: troca de usuário tocando no avatar do header. */
@@ -20,10 +21,11 @@ const UserSwitcherSheet = ({
   onSelect,
   onManageProfiles,
   onClose,
+  required = false,
 }: UserSwitcherSheetProps) => (
-  <div className="fixed inset-0 z-50 md:hidden">
-    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
-    <div className="absolute bottom-0 inset-x-0 bg-[#121214] border-t border-zinc-800 rounded-t-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-5 duration-200">
+  <div className="fixed inset-0 z-[60]">
+    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={required ? undefined : onClose} />
+    <div className="absolute bottom-0 inset-x-0 md:bottom-auto md:top-1/2 md:left-1/2 md:right-auto md:w-[420px] md:-translate-x-1/2 md:-translate-y-1/2 bg-[#121214] border-t md:border border-zinc-800 rounded-t-3xl md:rounded-3xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-5 duration-200">
       <div className="w-10 h-1 bg-zinc-700 rounded-full mx-auto mb-4" />
       <h3 className="text-lg font-bold text-white">Entrar como</h3>
       <p className="text-xs text-zinc-500 mt-0.5 mb-4">
@@ -52,16 +54,18 @@ const UserSwitcherSheet = ({
               <p className="text-xs text-zinc-500">{u.role}</p>
             </div>
             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: u.color }} />
-            {u.id === currentUser.id && <Check className="w-5 h-5 text-pink-500 shrink-0" />}
+            {!required && u.id === currentUser.id && <Check className="w-5 h-5 text-pink-500 shrink-0" />}
           </button>
         ))}
       </div>
-      <button
-        onClick={onManageProfiles}
-        className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl flex items-center justify-center gap-2 transition-colors"
-      >
-        <Settings className="w-4 h-4" /> Gerenciar perfis
-      </button>
+      {!required && (
+        <button
+          onClick={onManageProfiles}
+          className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl flex items-center justify-center gap-2 transition-colors"
+        >
+          <Settings className="w-4 h-4" /> Gerenciar perfis
+        </button>
+      )}
     </div>
   </div>
 );
