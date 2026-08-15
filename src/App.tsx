@@ -85,7 +85,8 @@ const App = () => {
   // Começa vazio quando há Supabase (os dados reais carregam em seguida — evita piscar
   // os dados de exemplo); sem conexão, mantém os dados demo para demonstração local.
   const [users, setUsers] = useState<User[]>(() => (isSupabaseConfigured() ? [] : initialUsers));
-  const [currentUserId, setCurrentUserId] = useState<string>(initialUsers[0].id);
+  // Nenhum perfil entra automaticamente: a pessoa escolhe quem está usando o app.
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   // Derivado do id para que cor/foto editadas nas Configurações reflitam na hora
   const currentUser: User = users.find((u) => u.id === currentUserId) ?? users[0] ?? initialUsers[0];
   const [activeTab, setActiveTab] = useState<Tab>('calendar');
@@ -173,7 +174,6 @@ const App = () => {
 
   // Presença online/offline: quem está com o app aberto agora (multi-aparelho)
   const [presence, setPresence] = useState<Record<string, boolean>>({});
-  const presenceAnnouncedRef = useRef(false);
 
   // Espelho dos avisos (para re-notificar compromissos importantes sem closures antigos)
   const avisosRef = useRef(avisos);
@@ -185,6 +185,19 @@ const App = () => {
   const visibleAvisos = avisos.filter(
     (a) => (a.paraId === 'all' || a.paraId === currentUser.id) && !a.lida,
   );
+  const importantAvisos = avisos.filter((a, index, all) => {
+    if (a.paraId !== 'all' && a.paraId !== currentUser.id) return false;
+    if (!a.refId) return false;
+    // Edições podem gerar outro registro para a mesma tarefa; exibe apenas o mais recente.
+    if (all.findIndex((other) => other.refId === a.refId && other.tipo === a.tipo) !== index) return false;
+    if (a.tipo === 'evento') {
+      return events.some((event) => event.id === a.refId && event.alertar && !event.concluido);
+    }
+    if (a.tipo === 'filho') {
+      return childCommitments.some((item) => item.id === a.refId && item.alertar && !item.concluido);
+    }
+    return false;
+  });
   const unreadCount = visibleAvisos.length;
 
   const addAviso = async (
@@ -215,11 +228,16 @@ const App = () => {
   };
 
   const marcarTodosLidos = () => {
-    setAvisos((prev) => prev.filter((a) => a.paraId !== 'all' && a.paraId !== currentUser.id));
+    const protectedIds = new Set(importantAvisos.map((a) => a.id));
+    setAvisos((prev) =>
+      prev.filter(
+        (a) => protectedIds.has(a.id) || (a.paraId !== 'all' && a.paraId !== currentUser.id),
+      ),
+    );
     void markAllAvisosLidas();
   };
 
-  // Parceiro visualizou o compromisso → avisos dele somem da lista e param de notificar
+  // O aviso importante só some quando o compromisso for concluído ou excluído.
   const visualizarCompromisso = (eventId: string) => {
     setAvisos((prev) => prev.filter((a) => a.refId !== eventId));
     void markAvisosPorRef(eventId);
@@ -302,33 +320,13 @@ const App = () => {
     };
   }, [connectionState]);
 
-  // ——— Presença online: marca quem abriu o app, avisa a família e mostra online ———
+  // ——— Presença online: apenas mostra quem está online (sem gerar push) ———
   useEffect(() => {
-    if (connectionState !== 'connected') return;
+    if (connectionState !== 'connected' || !currentUserId) return;
 
     const report = (online: boolean) => void setPresenca(currentUserId, online);
 
-    // Avisa (aviso + push) que este usuário entrou no app — uma vez por sessão
-    const shouldAnnounce = !presenceAnnouncedRef.current;
-    presenceAnnouncedRef.current = true;
     report(true);
-    if (shouldAnnounce) {
-      const action = `${currentUser.name} está online`;
-      const details = `${currentUser.name} abriu o app agora.`;
-      void addAviso(action, details, 'presenca', 'all');
-      void sendPushNotification(`FamíliaApp: ${action}`, details, '/', 'familiapp-presenca');
-      if (pushGranted && typeof Notification !== 'undefined') {
-        try {
-          new Notification(`FamíliaApp: ${action}`, {
-            body: details,
-            icon: currentUser.avatar,
-            tag: 'familiapp-presenca',
-          });
-        } catch (err) {
-          console.error('Erro no Push Nativo:', err);
-        }
-      }
-    }
 
     // Heartbeat a cada 30s enquanto o app estiver visível
     const heartbeat = window.setInterval(() => {
@@ -360,7 +358,7 @@ const App = () => {
       for (const ev of eventsRef.current) {
         if (!ev.alertar || ev.concluido) continue;
         const aviso = avisosRef.current.find((a) => a.refId === ev.id);
-        if (!aviso || aviso.lida) continue;
+        if (!aviso) continue;
         const owner = usersRef.current.find((u) => u.id === ev.userId);
         const body = `Compromisso de ${owner?.name ?? 'alguém'} às ${ev.time}. Toque para visualizar.`;
         void sendPushNotification(`⚠️ Importante: ${ev.title}`, body, '/', `familiapp-importante-${ev.id}`);
@@ -380,7 +378,7 @@ const App = () => {
       for (const c of childRef.current) {
         if (!c.alertar || c.concluido) continue;
         const aviso = avisosRef.current.find((a) => a.refId === c.id);
-        if (!aviso || aviso.lida) continue;
+        if (!aviso) continue;
         const body = `Compromisso do Filho: "${c.title}". Toque para visualizar.`;
         void sendPushNotification(`⚠️ Filho: ${c.title}`, body, '/', `familiapp-filho-${c.id}`);
         if (pushGranted && typeof Notification !== 'undefined') {
@@ -479,7 +477,7 @@ const App = () => {
     setShoppingItems(data.items);
     setChildCommitments(data.child);
     setGastos(data.gastos);
-    setCurrentUserId((cur) => (data.users.some((u) => u.id === cur) ? cur : data.users[0]?.id ?? cur));
+    setCurrentUserId((cur) => (cur && data.users.some((u) => u.id === cur) ? cur : null));
     setConnectionState('connected');
   };
 
@@ -638,11 +636,17 @@ const App = () => {
     // Aviso persistente (lido/não lido, com foto do remetente)
     void addAviso(action, details, tipo, paraId, refId);
 
-    // Web Push real: avisa todos os aparelhos da família, mesmo com o app fechado
-    // ou instalado como PWA (a tag igual evita notificação duplicada neste aparelho).
-    void sendPushNotification(`FamíliaApp: ${action}`, details, '/', 'familiapp-notify');
+    // Push somente para compra concluída e cadastro de um novo lembrete/compromisso.
+    const shouldPush =
+      action === 'Item Comprado' ||
+      ((tipo === 'evento' || tipo === 'filho') &&
+        (action.startsWith('Novo ') || action.includes('Importante')));
 
-    if (pushGranted && typeof Notification !== 'undefined') {
+    if (shouldPush) {
+      void sendPushNotification(`FamíliaApp: ${action}`, details, '/', `familiapp-${tipo}-${refId ?? 'novo'}`);
+    }
+
+    if (shouldPush && pushGranted && typeof Notification !== 'undefined') {
       try {
         new Notification(`FamíliaApp: ${action}`, {
           body: details,
@@ -690,6 +694,19 @@ const App = () => {
     <div className="flex flex-col md:flex-row h-screen supports-[height:100dvh]:h-dvh bg-[#09090b] text-white font-sans overflow-hidden selection:bg-pink-500/30">
       {/* Efeito de abertura (splash) */}
       {splashVisible && <SplashScreen fading={splashFading} onSkip={skipSplash} variant={logoVariant} />}
+
+      {/* Entrada obrigatória: evita assumir sempre o primeiro perfil da família. */}
+      {!splashVisible && !currentUserId && users.length > 0 && (
+        <UserSwitcherSheet
+          users={users}
+          currentUser={currentUser}
+          presence={presence}
+          onSelect={(id) => setCurrentUserId(id)}
+          onManageProfiles={() => setActiveTab('settings')}
+          onClose={() => undefined}
+          required
+        />
+      )}
 
       {/* Header mobile */}
       <div className="md:hidden flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 bg-[#121214] border-b border-zinc-800 shrink-0 z-20 relative">
@@ -811,6 +828,21 @@ const App = () => {
               </button>
             )}
           </div>
+        )}
+        {importantAvisos.length > 0 && (
+          <button
+            onClick={() => {
+              const first = importantAvisos[0];
+              setActiveTab(first.tipo === 'filho' ? 'child' : 'calendar');
+            }}
+            className="shrink-0 mx-3 mt-3 md:mx-8 px-4 py-3 rounded-2xl bg-amber-500/15 border border-amber-400/40 text-left shadow-lg shadow-amber-950/20"
+          >
+            <span className="block text-sm font-bold text-amber-300">⚠️ {importantAvisos.length === 1 ? importantAvisos[0].titulo : `${importantAvisos.length} lembretes pendentes`}
+            </span>
+            <span className="block text-xs text-amber-100/80 mt-1">
+              {importantAvisos[0].mensagem} · Este alerta fica na tela até ser concluído.
+            </span>
+          </button>
         )}
         {/* Toggle de visualização da agenda */}
         {activeTab === 'calendar' && (
@@ -1050,12 +1082,18 @@ const App = () => {
                             >
                               {sender?.name ?? 'Família'}
                             </span>
-                            <button
-                              onClick={() => marcarAvisoLida(a.id)}
-                              className="text-[10px] text-pink-400 font-semibold hover:text-pink-300 flex items-center gap-1"
-                            >
-                              <Check className="w-3 h-3" /> Marcar como lida
-                            </button>
+                            {importantAvisos.some((important) => important.id === a.id) ? (
+                              <span className="text-[10px] text-amber-400 font-semibold">
+                                Fica visível até concluir
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => marcarAvisoLida(a.id)}
+                                className="text-[10px] text-pink-400 font-semibold hover:text-pink-300 flex items-center gap-1"
+                              >
+                                <Check className="w-3 h-3" /> Marcar como lida
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

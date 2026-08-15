@@ -85,7 +85,7 @@ const ChildCommitmentsView = ({
     if (editing) {
       setCommitments((prev) => prev.map((c) => (c.id === editing.id ? { ...c, title, descricao, date, alertar } : c)));
       simulateNotifications(
-        alertar ? '⚠️ Compromisso do Filho' : 'Compromisso do Filho Atualizado',
+        'Compromisso do Filho Atualizado',
         `${currentUser.name} atualizou "${title}".${alertar ? ' ⚠️ Importante — abra para visualizar.' : ''}`,
         'all',
         'filho',

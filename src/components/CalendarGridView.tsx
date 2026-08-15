@@ -109,8 +109,6 @@ const CalendarGridView = ({
   };
 
   const openEditModal = (event: FamilyEvent) => {
-    // Parceiro visualizou o compromisso → avisos ficam lidos e param de notificar
-    if (event.alertar) onVisualizarCompromisso(event.id);
     setEditingEvent(event);
     setIsEventModalOpen(true);
   };
@@ -162,7 +160,7 @@ const CalendarGridView = ({
     if (editingEvent) {
       setEvents((prev) => prev.map((ev) => (ev.id === editingEvent.id ? { ...ev, ...data } : ev)));
       simulateNotifications(
-        data.alertar ? '⚠️ Compromisso Importante' : 'Compromisso Atualizado',
+        'Compromisso Atualizado',
         `${currentUser.name} atualizou "${data.title}".${data.alertar ? ' ⚠️ Importante — abra para visualizar.' : ''}`,
         notifyParaId,
         'evento',
