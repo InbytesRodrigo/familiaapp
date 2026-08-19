@@ -57,6 +57,7 @@ create table if not exists public.compromissos_filho (
   data_compromisso date,
   concluido boolean not null default false,
   data_conclusao date,
+  concluido_em timestamptz, -- instante exato para retenção de 24 horas
   alertar boolean not null default false,
   criado_em timestamptz not null default now()
 );

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Baby,
@@ -32,6 +32,7 @@ interface ChildCommitmentsViewProps {
 }
 
 const ORANGE = '#f97316';
+const COMPLETED_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 const ChildCommitmentsView = ({
   commitments,
@@ -45,17 +46,24 @@ const ChildCommitmentsView = ({
   // Exclusão com confirmação dentro do app (sem delay do diálogo do navegador)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const confirmTimerRef = useRef<number | undefined>(undefined);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const pending = commitments.filter((c) => !c.concluido);
-  const done = commitments.length - pending.length;
-
-  // Pendentes primeiro (por data); concluídos depois (pelo mais recente)
-  const sorted = [...commitments].sort((a, b) => {
-    if (a.concluido !== b.concluido) return a.concluido ? 1 : -1;
-    const da = a.date ?? a.dataConclusao ?? '';
-    const db = b.date ?? b.dataConclusao ?? '';
-    return da.localeCompare(db);
-  });
+  const done = commitments
+    .filter((c) => c.concluido)
+    .filter((c) => {
+      const completedAt = c.concluidoEm ? new Date(c.concluidoEm).getTime() : 0;
+      return completedAt > 0 && now - completedAt < COMPLETED_RETENTION_MS;
+    });
+  const sortedPending = [...pending].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
+  const sortedDone = [...done].sort(
+    (a, b) => new Date(b.concluidoEm!).getTime() - new Date(a.concluidoEm!).getTime(),
+  );
 
   const openAdd = () => {
     setEditing(null);
@@ -117,7 +125,12 @@ const ChildCommitmentsView = ({
     setCommitments((prev) =>
       prev.map((x) =>
         x.id === c.id
-          ? { ...x, concluido, dataConclusao: concluido ? toDateInput(new Date()) : undefined }
+          ? {
+              ...x,
+              concluido,
+              dataConclusao: concluido ? toDateInput(new Date()) : undefined,
+              concluidoEm: concluido ? new Date().toISOString() : undefined,
+            }
           : x,
       ),
     );
@@ -177,18 +190,18 @@ const ChildCommitmentsView = ({
           </div>
           <div className="bg-[#121214] p-4 rounded-3xl border border-zinc-800">
             <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Concluídos</span>
-            <p className="text-3xl font-bold text-white mt-1">{done}</p>
+            <p className="text-3xl font-bold text-white mt-1">{done.length}</p>
           </div>
         </div>
 
         {/* Lista */}
         <div className="space-y-3">
-          {sorted.length === 0 && (
+          {sortedPending.length === 0 && (
             <div className="text-center text-zinc-600 text-sm italic py-16">
-              Nenhum compromisso do Filho ainda. Toque em + para cadastrar.
+              Nenhum compromisso pendente. Toque em + para cadastrar.
             </div>
           )}
-          {sorted.map((c) => (
+          {sortedPending.map((c) => (
             <div
               key={c.id}
               className={`bg-[#121214] border-l-4 rounded-2xl p-4 flex items-start gap-3 transition-opacity ${
@@ -281,12 +294,41 @@ const ChildCommitmentsView = ({
             </div>
           ))}
         </div>
+
+        {sortedDone.length > 0 && (
+          <section className="mt-8 border-t border-zinc-800 pt-6">
+            <div className="mb-3">
+              <h3 className="text-sm font-bold text-emerald-400">Concluídos nas últimas 24 horas</h3>
+              <p className="text-[11px] text-zinc-500 mt-0.5">Depois desse período, eles são removidos automaticamente.</p>
+            </div>
+            <div className="space-y-3">
+              {sortedDone.map((c) => (
+                <div key={c.id} className="bg-[#121214] border-l-4 border-emerald-500 rounded-2xl p-4 flex items-start gap-3 opacity-70">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold line-through text-zinc-500">{c.title}</p>
+                    {c.dataConclusao && <p className="text-[10px] text-emerald-400 mt-1">Concluído em {formatDateBR(c.dataConclusao)}</p>}
+                  </div>
+                  <button onClick={() => askDelete(c.id)} className="p-2 text-red-400/80 hover:bg-red-500/10 rounded-xl" title="Excluir agora">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  {confirmDeleteId === c.id && (
+                    <button onClick={() => handleDelete(c)} className="p-2 bg-red-500/20 text-red-400 rounded-xl" title="Confirmar exclusão">
+                      <Check className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Botão flutuante laranja */}
       <button
         onClick={openAdd}
-        className="absolute bottom-24 md:bottom-8 right-8 w-16 h-16 bg-orange-500 hover:bg-orange-400 text-white rounded-full shadow-[0_0_20px_rgba(249,115,22,0.4)] flex items-center justify-center transition-transform hover:scale-105 z-10"
+        aria-label="Adicionar compromisso do Filho"
+        className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] md:bottom-8 right-6 md:right-8 w-14 h-14 md:w-16 md:h-16 bg-orange-500 hover:bg-orange-400 text-white rounded-full shadow-[0_0_20px_rgba(249,115,22,0.4)] flex items-center justify-center transition-transform hover:scale-105 z-30"
       >
         <Plus className="w-8 h-8" />
       </button>

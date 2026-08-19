@@ -67,6 +67,8 @@ export interface ChildCommitment {
   concluido: boolean;
   /** Data em que foi concluído (YYYY-MM-DD) — registrada ao marcar concluído. */
   dataConclusao?: string;
+  /** Instante exato da conclusão — usado para manter o item em "Concluídos" por 24h. */
+  concluidoEm?: string;
 }
 
 /** Gasto compartilhado: valor, parcelas, método e status quitado. */

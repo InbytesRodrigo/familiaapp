@@ -44,7 +44,8 @@ const CalendarGridView = ({
   );
 
   // ——— Resumo do mês ———
-  const monthEvents = events.filter(
+  const visibleEvents = events.filter((event) => !event.concluido);
+  const monthEvents = visibleEvents.filter(
     (e) =>
       e.date.getFullYear() === currentDate.getFullYear() &&
       e.date.getMonth() === currentDate.getMonth(),
@@ -88,7 +89,7 @@ const CalendarGridView = ({
 
   const getEventsForDay = (day: number) => {
     const dateStr = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
-    return events
+    return visibleEvents
       .filter((e) => e.date.toDateString() === dateStr)
       .sort((a, b) => a.time.localeCompare(b.time));
   };

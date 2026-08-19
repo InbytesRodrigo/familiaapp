@@ -112,7 +112,8 @@ const CalendarListView = ({
   };
 
   // Agrupa eventos por data
-  const groupedEvents = events.reduce<Record<string, { date: Date; events: FamilyEvent[] }>>(
+  const visibleEvents = events.filter((event) => !event.concluido);
+  const groupedEvents = visibleEvents.reduce<Record<string, { date: Date; events: FamilyEvent[] }>>(
     (acc, event) => {
       const dateStr = event.date.toDateString();
       if (!acc[dateStr]) acc[dateStr] = { date: event.date, events: [] };
