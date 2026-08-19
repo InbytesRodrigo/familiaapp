@@ -182,9 +182,16 @@ const App = () => {
   }, [avisos]);
 
   // Só avisos não lidos aparecem: ao marcar como lido, some da lista
-  const visibleAvisos = avisos.filter(
-    (a) => (a.paraId === 'all' || a.paraId === currentUser.id) && !a.lida,
-  );
+  const visibleAvisos = avisos.filter((a) => {
+    if ((a.paraId !== 'all' && a.paraId !== currentUser.id) || a.lida) return false;
+    if (a.tipo === 'evento' && a.refId) {
+      return events.some((event) => event.id === a.refId && !event.concluido);
+    }
+    if (a.tipo === 'filho' && a.refId) {
+      return childCommitments.some((item) => item.id === a.refId && !item.concluido);
+    }
+    return true;
+  });
   const importantAvisos = avisos.filter((a, index, all) => {
     if (a.paraId !== 'all' && a.paraId !== currentUser.id) return false;
     if (!a.refId) return false;
@@ -456,6 +463,7 @@ const App = () => {
   const lastUsersRef = useRef<User[]>(isSupabaseConfigured() ? [] : initialUsers);
   const lastItemsRef = useRef<ShoppingItem[]>(isSupabaseConfigured() ? [] : initialShoppingItems);
   const lastChildRef = useRef<ChildCommitment[]>([]);
+  const deletedChildIdsRef = useRef<Set<string>>(new Set());
   const lastGastosRef = useRef<Gasto[]>([]);
 
   // Aplica os dados vindos do servidor sem apagar mudanças locais ainda não sincronizadas
@@ -470,12 +478,13 @@ const App = () => {
     lastEventsRef.current = data.events;
     lastUsersRef.current = data.users;
     lastItemsRef.current = data.items;
-    lastChildRef.current = data.child;
+    const serverChild = data.child.filter((item) => !deletedChildIdsRef.current.has(item.id));
+    lastChildRef.current = serverChild;
     lastGastosRef.current = data.gastos;
     setEvents(data.events);
     setUsers(data.users);
     setShoppingItems(data.items);
-    setChildCommitments(data.child);
+    setChildCommitments(serverChild);
     setGastos(data.gastos);
     setCurrentUserId((cur) => (cur && data.users.some((u) => u.id === cur) ? cur : null));
     setConnectionState('connected');
@@ -562,6 +571,7 @@ const App = () => {
     if (prev === childCommitments) return;
     lastChildRef.current = childCommitments;
     const removed = prev.filter((c) => !childCommitments.some((n) => n.id === c.id)).map((c) => c.id);
+    removed.forEach((id) => deletedChildIdsRef.current.add(id));
     void syncChildCommitments(childCommitments).then((ok) => {
       if (!ok && isSupabaseConfigured()) {
         showNotification(
@@ -571,8 +581,30 @@ const App = () => {
         );
       }
     });
-    if (removed.length > 0) void deleteChildCommitments(removed);
+    if (removed.length > 0) {
+      void deleteChildCommitments(removed).then((ok) => {
+        if (ok) removed.forEach((id) => deletedChildIdsRef.current.delete(id));
+        else if (isSupabaseConfigured()) {
+          showNotification('Erro ao excluir', 'O item ficou oculto, mas não foi possível confirmar a exclusão no servidor.', 'error');
+        }
+      });
+    }
   }, [childCommitments]);
+
+  // Compromissos do Filho concluídos ficam no histórico por apenas 24 horas.
+  useEffect(() => {
+    const removeExpired = () => {
+      const now = Date.now();
+      setChildCommitments((prev) => prev.filter((item) => {
+        if (!item.concluido) return true;
+        const completedAt = item.concluidoEm ? new Date(item.concluidoEm).getTime() : 0;
+        return completedAt > 0 && now - completedAt < 24 * 60 * 60 * 1000;
+      }));
+    };
+    removeExpired();
+    const timer = window.setInterval(removeExpired, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const prev = lastGastosRef.current;

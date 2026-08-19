@@ -95,6 +95,7 @@ const childToDb = (c: ChildCommitment): Row => ({
   data_compromisso: c.date ?? null,
   concluido: c.concluido,
   data_conclusao: c.dataConclusao ?? null,
+  concluido_em: c.concluidoEm ?? null,
   alertar: c.alertar ?? false,
 });
 
@@ -105,6 +106,7 @@ const dbToChild = (row: Row): ChildCommitment => ({
   date: row.data_compromisso ? String(row.data_compromisso) : undefined,
   concluido: Boolean(row.concluido),
   dataConclusao: row.data_conclusao ? String(row.data_conclusao) : undefined,
+  concluidoEm: row.concluido_em ? String(row.concluido_em) : undefined,
   alertar: Boolean(row.alertar),
 });
 
